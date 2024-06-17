@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL-Datenbanken</title>
+    <link href="{{ url_for('static', filename='styles/style.css') }}" rel="stylesheet" />
+</head>
+
+<body>
+    <div class="container">
+        <h1>Willkommen, {{username}}!</h1>
+        <fieldset>
+            <legend>Mit wie vielen Datenbanken wollen Sie arbeiten?</legend>
+            <div class="container">
+                <input type="radio" id="one" name="db_amount" value=1 checked>
+                <label for="one">1</label><br>
+                <input type="radio" id="two" name="db_amount" value=2>
+                <label for="two">2</label><br>
+            </div>
+        </fieldset>
+        <label for="username"><b>Benutzername</b></label>
+        <label for="password"><b>Passwort</b></label>
+        <form action="/login" method="POST">
+            <input type="username" name="username" placeholder="Benutzername" required>
+            <input type="password" name="password" placeholder="Passwort" required>
+            <input type="submit" value="Log in">
+        </form>
+        <label>
+            <input type="checkbox" checked="checked" name="remember"> Remember me
+        </label>
+    </div>
+</body>
+
+</html>

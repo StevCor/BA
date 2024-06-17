@@ -1,0 +1,1 @@
+# Auslösen der Suche nach verfügbaren Datenbanken über das Model, Ergebnisübermittlung an den View

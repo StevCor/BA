@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQL-Datenbanken</title>
+    <link href="{{ url_for('static', filename='styles/style.css') }}" rel="stylesheet" />
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.1/css/all.css">
+
+</head>
+
+<body>
+
+    <div class="container">
+        <form action="/login" method="POST">
+            <label for="username"><b>Benutzername</b></label>
+            <input type="username" name="username" placeholder="Benutzername" required>
+            <label for="password"><b>Passwort</b></label>
+            <input type="password" name="password" placeholder="Passwort" required>
+            <input type="submit" value="Log in">
+        </form>
+        <label>
+            <input type="checkbox" checked="checked" name="remember"> Remember me
+        </label>
+    </div>
+</body>
+
+</html>
