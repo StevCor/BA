@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <title>Registrierung</title>
+    {% include 'css.html' %}
+
+</head>
+
+<body>
+    <div class="register">
+        <h1>Registrierung</h1>
+        <div class="links">
+            <a href="{{ url_for('check_login') }}">Login</a>
+            <a href="{{ url_for('register') }}" class="active">Registrierung</a>
+        </div>
+        <form action="{{ '/register' }}" method="POST" autocomplete="off">
+            <label for="username">
+                <i class="fa fa-user"></i>
+            </label>
+            <input type="text" name="username" placeholder="Benutzername" id="username" required>
+            <label for="password">
+                <i class="fa fa-lock"></i>
+            </label>
+            <input type="password" name="password" placeholder="Passwort" id="password" required>
+            <div class="msg">{{ message }}</div>
+            <input type="submit" value="Registrieren">
+        </form>
+    </div>
+</body>
+
+</html>

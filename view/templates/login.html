@@ -1,18 +1,33 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SQL-Datenbanken</title>
-    <link href="{{ url_for('static', filename='styles/style.css') }}" rel="stylesheet" />
-    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.1/css/all.css">
-
+    {% include 'css.html' %}
 </head>
 
 <body>
+    <div class="login">
+        <h1>LOGIN</h1>
+        <div class="links">
+            <a href="{{ url_for('check_login') }}" class="active">Login</a>
+            <a href="{{ url_for('register') }}">Registrierung</a>
+        </div>
+        <form action="/login" method="POST">
+            <label for="username">
+                <i class="fa fa-user"></i>
+            </label>
+            <input type="text" name="username" placeholder="Benutzername" id="username" required>
+            <label for="password">
+                <i class="fa fa-lock"></i>
+            </label>
+            <input type="password" name="password" placeholder="Passwort" id="password" required>
+            <div class="msg">{{ message }}</div>
+            <input type="submit" value="Login">
+        </form>
+    </div>
 
-    <div class="container">
+    <!-- <div class="container">
         <form action="/login" method="POST">
             <label for="username"><b>Benutzername</b></label>
             <input type="username" name="username" placeholder="Benutzername" required>
@@ -23,7 +38,7 @@
         <label>
             <input type="checkbox" checked="checked" name="remember"> Remember me
         </label>
-    </div>
+    </div> -->
 </body>
 
 </html>
