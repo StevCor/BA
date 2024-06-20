@@ -1,4 +1,4 @@
-/* taken from: https://dev.to/phylis/loginregistration-form-with-python-flask-and-mysql-3hek */
+/* adapted from: https://dev.to/phylis/loginregistration-form-with-python-flask-and-mysql-3hek */
 
 * {
     box-sizing: border-box;
@@ -21,8 +21,18 @@ body {
     margin: 100px auto;
 }
 
+.connect {
+    border-radius: 5px;
+    padding: 20px;
+    width: 650px;
+    background-color: #ffffff;
+    box-shadow: 0 0 9px 0 rgba(0, 0, 0, 0.3);
+    margin: 100px auto;
+}
+
 .login h1,
-.register h1 {
+.register h1,
+.connect h1 {
     text-align: center;
     color: brown;
     font-size: 24px;
@@ -30,14 +40,20 @@ body {
     border-bottom: 1px solid #dee0e4;
 }
 
+.connect h2 {
+    text-align: center;
+}
+
 .login .links,
-.register .links {
+.register .links,
+.connect .links {
     display: flex;
     padding: 0 15px;
 }
 
 .login .links a,
-.register .links a {
+.register .links a,
+.connect .links a {
     color: #adb2ba;
     text-decoration: none;
     display: inline-flex;
@@ -46,12 +62,14 @@ body {
 }
 
 .login .links a:hover,
-.register .links a:hover {
+.register .links a:hover,
+.connect .links a:hover {
     color: brown;
 }
 
 .login .links a.active,
-.register .links a.active {
+.register .links a.active,
+.connect .links a.active {
     border-bottom: 3px solid brown;
     color: brown;
 }
@@ -62,6 +80,11 @@ body {
     flex-wrap: wrap;
     justify-content: center;
     padding-top: 20px;
+}
+
+.connect form {
+    display: grid;
+    grid-template-columns: repeat(1, 1fr);
 }
 
 .login form label,
@@ -75,12 +98,47 @@ body {
     color: #ffffff;
 }
 
+.col-25 {
+    float: left;
+    width: 25%;
+    margin-top: 6px;
+}
+
+.col-25>* {
+    padding: 0.5em;
+    white-space: nowrap;
+}
+
+.col-75 {
+    float: left;
+    width: 75%;
+    margin-top: 6px;
+
+}
+
+/* Clear floats after the columns*/
+.row::after {
+    content: "";
+    display: table;
+    clear: both;
+}
+
+.row {
+    display: inline-block;
+}
+
+.connect form label {
+    padding: 12px 12px 12px 0;
+    display: inline-block;
+    height: 50px;
+    background-color: brown;
+    color: #ffffff;
+}
+
 .login form input[type="password"],
 .login form input[type="text"],
-.login form input[type="email"],
 .register form input[type="password"],
-.register form input[type="text"],
-.register form input[type="email"] {
+.register form input[type="text"] {
     width: 310px;
     height: 50px;
     border: 1px solid #dee0e4;
@@ -88,10 +146,32 @@ body {
     padding: 0 15px;
 }
 
-.login form input[type="submit"],
-.register form input[type="submit"] {
+input[type=text],
+select,
+textarea {
     width: 100%;
-    padding: 15px;
+    padding: 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    resize: vertical;
+}
+
+.connect form input[type="password"],
+.connect form input[type="text"],
+.connect form input[type="number"],
+select {
+    width: 100%;
+    height: 50px;
+    padding: 12px;
+    border: 1px solid #dee0e4;
+    margin-bottom: 20px;
+}
+
+.login form input[type="submit"],
+.register form input[type="submit"],
+.connect form input[type="submit"] {
+    width: 100%;
+    padding: 12px;
     margin-top: 20px;
     background-color: brown;
     border: 0;

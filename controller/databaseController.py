@@ -2,7 +2,7 @@ from model import databaseModel as dModel
 # Weitergabe der Parameter für den Aufbau der Verbindung zu einer Datenbank an das Model
 
 def connect_to_db(username, password, host, port, db_name, db_dialect, db_encoding):
-    return dModel.build_engine_to_connect_to_db(username, password, host, port, db_name, db_dialect)
+    return dModel.build_engine_to_connect_to_db(username, password, host, port, db_name, db_dialect, db_encoding)
 
 
 # Weitergabe der Parameter für eine Datenbankabfrage an das Model, Ergebnisübermittlung an den View

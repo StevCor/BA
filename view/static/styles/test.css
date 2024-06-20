@@ -1,0 +1,35 @@
+body {
+    margin: 1em;
+}
+
+.wrap-inline-block {
+    display: inline-block;
+}
+
+#div4 {
+    border: 1px solid #888;
+    padding: 0.5em;
+    text-align: center;
+    white-space: nowrap;
+}
+
+#div4 {
+    position: absolute;
+    left: 1em;
+}
+
+#div4>* {
+    margin: 0.5em;
+    color: white;
+    background-color: navy;
+    padding: 0.5em;
+}
+
+#div4 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+}
+
+#div4 {
+    top: 28.5em;
+}

@@ -30,7 +30,7 @@ def register_new_user(username, password):
 
 #  Überprüfung der Logindaten für die Web-App, Ausgabe einer Bestätigung oder Fehlermeldung
 def login_user(username, password):
-    message = None
+    message = ''
     if not os.path.exists('user.txt'):
         message = 'Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.'
         return False, message

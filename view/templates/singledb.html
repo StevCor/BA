@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <title>SQL-Datenbanken</title>
+    {% include 'css.html' %}
+
+</head>
+
+<body>
+    <div class="connect">
+        <h1>Willkommen, {{username}}!</h1>
+        <h2>Mit wie vielen Datenbanken wollen Sie arbeiten?</h2>
+        <div class="links">
+            <a href="{{ url_for('login_to_one_db') }}" class="active">1</a>
+            <a href="{{ url_for('login_to_two_dbs') }}">2</a>
+        </div>
+
+        <h2>Bitte geben Sie folgende Daten für die Datenbank ein:</h2>
+        <form action="/singledb" method="POST">
+            <div class="row">
+                <div class="col-25">
+                    <label for="dbname">Datenbank:</label>
+                </div>
+                <div class="col-75">
+                    <input type="text" id="dbname" placeholder="Datenbankname" name="dbname" required>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-25">
+                    <label for="dbdialect">SQL-Dialekt:</label>
+                </div>
+                <div class="col-75">
+                    <select name="dbdialect" id="dbdialect" required>
+                        <option value="mariadb">MariaDB</option>
+                        <option value="postgresql">PostgreSQL</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-25">
+                    <label for="username">Benutzername:</label>
+                </div>
+                <div class="col-75">
+                    <input type="text" name="username" placeholder="Datenbankbenutzername" id="username" required>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-25">
+                    <label for="password">Passwort:</label>
+                </div>
+                <div class="col-75">
+                    <input type="password" name="password" placeholder="Datenbankpasswort" id="password" required>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-25">
+                    <label for="hostname">Hostname:</label>
+                </div>
+                <div class="col-75">
+                    <input type="text" name="hostname" placeholder="Hostname" id="hostname" required>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-25">
+                    <label for="portnumber">Portnummer:</label>
+                </div>
+                <div class="col-75">
+                    <input type="number" name="portnumber" placeholder="Portnummer" id="portnumber" required>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-25">
+                    <label for="encoding">Zeichencodierung:</label>
+                </div>
+                <div class="col-75">
+                    <select name="encoding" id="encoding" required>
+                        <option value="utf8">UTF8</option>
+                        <option value="latin1">ISO 8859-1 bzw. Latin-1</option>
+                    </select>
+                </div>
+            </div>
+            <div class="msg">{{ message }}</div>
+            <div class="row">
+                <input type="submit" value="Mit der Datenbank verbinden">
+            </div>
+        </form>
+    </div>
+</body>
+
+</html>
