@@ -10,13 +10,8 @@
 <body>
     <div class="connect">
         <h1>Willkommen, {{username}}!</h1>
-        <h2>Mit wie vielen Datenbanken wollen Sie arbeiten?</h2>
-        <div class="links">
-            <a href="{{ url_for('login_to_one_db') }}" class="active">1</a>
-            <a href="{{ url_for('login_to_two_dbs') }}">2</a>
-        </div>
-
-        <h2>Bitte geben Sie folgende Daten für die Datenbank ein:</h2>
+        <h2>Sie können mit bis zu zwei Datenbanken arbeiten.</h2>
+        <h2>Bitte geben Sie folgende Daten für die erste Datenbank ein:</h2>
         <form action="/singledb" method="POST">
             <div class="row">
                 <div class="col-25">
@@ -58,7 +53,10 @@
                     <label for="hostname">Hostname:</label>
                 </div>
                 <div class="col-75">
-                    <input type="text" name="hostname" placeholder="Hostname" id="hostname" required>
+                    <select name="hostname" id="hostname" required>
+                        <option value="localhost">localhost</option>
+                    </select>
+                    <!-- <input type="text" name="hostname" placeholder="Hostname" id="hostname" required> -->
                 </div>
             </div>
             <div class="row">
@@ -81,8 +79,9 @@
                 </div>
             </div>
             <div class="msg">{{ message }}</div>
-            <div class="row">
-                <input type="submit" value="Mit der Datenbank verbinden">
+            <div class="buttons">
+                <input type="submit" name="onedb" value="Nur mit dieser Datenbank verbinden">
+                <input type="submit" name="twodbs" value="Mit weiterer Datenbank verbinden">
             </div>
         </form>
     </div>

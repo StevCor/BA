@@ -3,7 +3,8 @@ from sqlalchemy import text
 import os
 from waitress import serve
 from controller.loginController import login, register_user
-from controller.databaseController import connect_to_db
+from controller.databaseController import connect_to_db, get_tables_in_db
+from model.SQLDatabaseError import DatabaseError
 
 global engine_1
 global engine_2
@@ -11,7 +12,7 @@ global db_in_use
 
 engine_1 = None
 engine_2 = None
-db_in_use = 0
+db_in_use = 0 # 0: keine Engine, 1: engine_1 ist nutzbar, 2: engine_2 ist nutzbar, 3: engine_ und engine_2 sind nutzbar
 
 
 app = Flask(__name__, template_folder = 'view/templates', static_folder = 'view/static')
@@ -62,13 +63,30 @@ def login_to_one_db():
             host = request.form['hostname']
             port = request.form['portnumber']
             db_encoding = request.form['encoding']
-            login_to_db(username, password, host, port, db_name, db_dialect, db_encoding)
-        return render_template('singledb.html', username = session['username'])
-    
+            message = login_to_db(username, password, host, port, db_name, db_dialect, db_encoding)
+            if not message == '':
+                return render_template('singledb.html', username = session['username'], message = message)
+            else:
+                if 'onedb' in request.form.keys():
+                    tables = dict()
+                    if db_in_use == 1:
+                        tables = get_tables_in_db(engine_1)
+                    elif db_in_use == 2:
+                        tables = get_tables_in_db(engine_2)
+                    return render_template('tables.html', dbname = db_name, tables = tables)
+                elif 'twodbs' in request.form.keys():
+                    return render_template('tables.html')
+        elif request.method == 'GET':
+            return render_template('singledb.html', username = session['username'])
+   
 
 @app.route('/twodbs')
 def login_to_two_dbs():
     return None
+
+@app.route('/tables')
+def list_tables():
+    return render_template('tables.html', dbname = 'Test')
     
 @app.route('/logout')
 def logout():
@@ -85,29 +103,36 @@ def login_to_db(username, password, host, port, db_name, db_dialect, db_encoding
     global engine_1
     global engine_2
     global db_in_use
+    result = None
+    message = ''
     if engine_1 and engine_2:
-        print('Sie haben sich bereits mit zwei Datenbanken verbunden.')
-    elif not engine_1:
-        engine_1 = connect_to_db(username, password, host, port, db_name, db_dialect, db_encoding)
-        print(f'Verbindung zur Datenbank {db_name} aufgebaut.')
-        if engine_2:
-            db_in_use = 2
+        message = 'Sie haben sich bereits mit zwei Datenbanken verbunden.'
+        print(message)
+    else:
+        try: 
+            db_engine = connect_to_db(username, password, host, port, db_name, db_dialect, db_encoding)
+        except DatabaseError as error:
+            message = str(error)
         else:
-            db_in_use = 1
-    elif engine_1 and not engine_2:
-        engine_2 = connect_to_db(username, password, host, port, db_name, db_dialect, db_encoding)
-        db_in_use = 2
-        print(f'Verbindung zur Datenbank {db_name} aufgebaut.')
+            if not engine_1:
+                engine_1 = db_engine
+                print(f'Verbindung zur Datenbank {db_name} aufgebaut.')
+                db_in_use += 1
+            elif engine_1 and not engine_2:
+                engine_2 = db_engine
+                db_in_use += 2
+                print(f'Verbindung zur Datenbank {db_name} aufgebaut.')
+    return message
 
 
 
 
 if __name__ == '__main__':
-    login_to_db('postgres', 'arc-en-ciel', 'localhost', 5432, 'Test', 'postgresql', 'utf8')
-    with engine_1.connect() as conn:
-        result = conn.execute(text('SELECT * FROM studierende'))
-        for row in result.all():
-            print(row)
+    # login_to_db('postgres', 'arc-en-ciel', 'localhost', 5432, 'Test', 'postgresql', 'utf8')
+    # with engine_1.connect() as conn:
+    #     result = conn.execute(text('SELECT * FROM studierende'))
+    #     for row in result.all():
+    #         print(row)
 
     app.secret_key = os.urandom(12)
     serve(app, host = '0.0.0.0', port = 8000)

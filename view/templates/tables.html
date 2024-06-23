@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <title>SQL-Datenbanken</title>
+    {% include 'css.html' %}
+</head>
+
+<body>
+    <div class="selecttable">
+        <h1>Auswahl der Tabellen aus der aktiven Datenbank {{ dbname }}</h1>
+        <h3>Bitte wählen Sie bis zu zwei Tabellen der Datenbank {{ dbname }} aus, um mit diesen zu arbeiten:</h3>
+        <form action="/login" method="POST">
+            <div class="tablelist">
+                <div class="listcolumntitle">
+
+                </div>
+                <div class="tables">
+                    <select multiple size="20">
+                        {% for table_name in tables %}
+                        <option value="{{ table_name }}">{{ table_name }} mit den Spalten
+                            {% for column in tables[table_name] %}
+                            {{ column }}
+                            {% endfor %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                    </ul>
+                </div>
+            </div>
+            <div class="msg">{{ message }}</div>
+            <div class="buttons">
+                <div class="links">
+                    <a href="{{ url_for('login_to_one_db') }}"> Zurück </a>
+                    <a href="{{ url_for('list_tables') }}"><button> Abbrechen </button></a>
+                </div>
+                <input type="submit" value="Tabellen auswählen">
+            </div>
+
+        </form>
+    </div>
+</body>
+
+</html>
