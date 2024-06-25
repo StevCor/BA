@@ -63,8 +63,10 @@ def login_to_one_db():
             host = request.form['hostname']
             port = request.form['portnumber']
             db_encoding = request.form['encoding']
-            message = login_to_db(username, password, host, port, db_name, db_dialect, db_encoding)
-            if not message == '':
+            login_result = login_to_db(username, password, host, port, db_name, db_dialect, db_encoding)
+            message = login_result[0]
+            status = login_result[1]
+            if not status == 0:
                 return render_template('singledb.html', username = session['username'], message = message)
             else:
                 if 'onedb' in request.form.keys():
@@ -73,7 +75,7 @@ def login_to_one_db():
                         tables = get_tables_in_db(engine_1)
                     elif db_in_use == 2:
                         tables = get_tables_in_db(engine_2)
-                    return render_template('tables.html', dbname = db_name, tables = tables)
+                    return render_template('tables.html', dbname = db_name, tables = tables, message = message)
                 elif 'twodbs' in request.form.keys():
                     return render_template('tables.html')
         elif request.method == 'GET':
@@ -84,15 +86,23 @@ def login_to_one_db():
 def login_to_two_dbs():
     return None
 
-@app.route('/tables')
+@app.route('/tables', methods=['GET', 'POST'])
 def list_tables():
-    return render_template('tables.html', dbname = 'Test')
+    tables = dict()
+    if db_in_use == 1:
+        tables = get_tables_in_db(engine_1)
+    elif db_in_use == 2:
+        tables = get_tables_in_db(engine_2)
+    return render_template('onetable.html', table_name = 'Studierende', table_columns = ['Matrikelnummer', 'Vorname', 'Nachname'], table_header = [{'id':'matrikelnummer', 'name': 'Matrikelnummer'}, {'id': 'vorname', 'name': 'Vorname'}, {'id': 'nachname', 'name': 'Nachname'}])
     
 @app.route('/logout')
 def logout():
     # Daten der Session entfernen, um den Nutzer auszuloggen
     session.pop('loggedin', None)
     session.pop('username', None)
+    # Engines zurücksetzen
+    engine_1 = None
+    engine_2 = None
     # Weiterleitung zur Login-Seite
     return render_template('login.html', 
                            message = 'Sie wurden erfolgreich abgemeldet. \nBitte loggen Sie sich wieder ein, um das Tool zu nutzen.')
@@ -103,11 +113,11 @@ def login_to_db(username, password, host, port, db_name, db_dialect, db_encoding
     global engine_1
     global engine_2
     global db_in_use
-    result = None
     message = ''
+    status = 0
     if engine_1 and engine_2:
         message = 'Sie haben sich bereits mit zwei Datenbanken verbunden.'
-        print(message)
+        status = 1
     else:
         try: 
             db_engine = connect_to_db(username, password, host, port, db_name, db_dialect, db_encoding)
@@ -116,24 +126,18 @@ def login_to_db(username, password, host, port, db_name, db_dialect, db_encoding
         else:
             if not engine_1:
                 engine_1 = db_engine
-                print(f'Verbindung zur Datenbank {db_name} aufgebaut.')
+                message = f'Verbindung zur Datenbank {db_name} aufgebaut.'
                 db_in_use += 1
             elif engine_1 and not engine_2:
                 engine_2 = db_engine
                 db_in_use += 2
-                print(f'Verbindung zur Datenbank {db_name} aufgebaut.')
-    return message
+                message = f'Verbindung zur Datenbank {db_name} aufgebaut.'
+    return message, status
 
 
 
 
 if __name__ == '__main__':
-    # login_to_db('postgres', 'arc-en-ciel', 'localhost', 5432, 'Test', 'postgresql', 'utf8')
-    # with engine_1.connect() as conn:
-    #     result = conn.execute(text('SELECT * FROM studierende'))
-    #     for row in result.all():
-    #         print(row)
-
     app.secret_key = os.urandom(12)
     serve(app, host = '0.0.0.0', port = 8000)
     
