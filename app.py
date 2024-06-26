@@ -86,14 +86,10 @@ def login_to_one_db():
 def login_to_two_dbs():
     return None
 
-@app.route('/tables', methods=['GET', 'POST'])
+@app.route('/tables', methods=['POST'])
 def list_tables():
-    tables = dict()
-    if db_in_use == 1:
-        tables = get_tables_in_db(engine_1)
-    elif db_in_use == 2:
-        tables = get_tables_in_db(engine_2)
-    return render_template('onetable.html', table_name = 'Studierende', table_columns = ['Matrikelnummer', 'Vorname', 'Nachname'], table_header = [{'id':'matrikelnummer', 'name': 'Matrikelnummer'}, {'id': 'vorname', 'name': 'Vorname'}, {'id': 'nachname', 'name': 'Nachname'}])
+    table_name = request.form['selectedtable'].capitalize()
+    return render_template('onetable.html', table_name = table_name, table_columns = ['Matrikelnummer', 'Vorname', 'Nachname'], table_header = [{'id':'matrikelnummer', 'name': 'Matrikelnummer'}, {'id': 'vorname', 'name': 'Vorname'}, {'id': 'nachname', 'name': 'Nachname'}])
     
 @app.route('/logout')
 def logout():

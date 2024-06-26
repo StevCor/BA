@@ -4,19 +4,27 @@
 <head>
     <title>SQL-Datenbanken</title>
     {% include 'css.html' %}
+    <script type="text/javascript">
+        function confirmBack() {
+            var result = confirm('Sind Sie sicher, dass Sie zur vorigen Seite zurückkehren wollen?');
+            if (result) {
+                window.history.back();
+            }
+        }
+    </script>
 </head>
 
 <body>
     <div class="selecttable">
         <h1>Auswahl der Tabellen aus der aktiven Datenbank {{ dbname }}</h1>
         <h3>Bitte wählen Sie bis zu zwei Tabellen der Datenbank {{ dbname }} aus, um mit diesen zu arbeiten:</h3>
-        <form action="/login" method="POST">
+        <form action="/tables" method="POST">
             <div class="tablelist">
                 <div class="listcolumntitle">
 
                 </div>
                 <div class="tables">
-                    <select multiple size="20">
+                    <select name="selectedtable" multiple size="15" required>
                         {% for table_name in tables %}
                         <option value="{{ table_name }}">{{ table_name }} mit den Spalten
                             {% for column in tables[table_name] %}
@@ -25,13 +33,12 @@
                         </option>
                         {% endfor %}
                     </select>
-                    </ul>
                 </div>
             </div>
             <div class="msg">{{ message }}</div>
             <div class="buttons">
                 <div class="links">
-                    <a href="{{ url_for('login_to_one_db') }}"> Zurück </a>
+                    <a href="{{ url_for('login_to_one_db') }}"><button onclick="confirmBack()">Zurück</button></a>
                     <a href="{{ url_for('list_tables') }}"><button> Abbrechen </button></a>
                 </div>
                 <input type="submit" value="Tabellen auswählen">
@@ -39,6 +46,20 @@
 
         </form>
     </div>
+    <script type="text/javascript">
+        function limitSelection(selectElement, limit) {
+            selectElement.addEventListener('change', function () {
+                const selectedOptions = Array.from(selectElement.selectedOptions);
+                if (selectedOptions.length > limit) {
+                    selectedOptions[selectedOptions.length - 1].selected = false;
+                    alert('Sie können nur maximal ' + limit + ' Tabellen auswählen.');
+                }
+            });
+        }
+        const multiSelect = document.getElementById('multiSelect');
+        const limit = 2;
+        limitSelection(multiSelect, limit)
+    </script>
 </body>
 
 </html>

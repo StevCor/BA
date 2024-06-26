@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <title>SQL-Datenbanken</title>
+    <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+    <style>
+        body {
+            font-family: Arial;
+        }
+
+        ul {
+            list-style-type: none;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        li {
+            float: left;
+        }
+
+        /* Style the tab */
+        .tab {
+            overflow: hidden;
+            border: 1px solid #ccc;
+            background-color: #f1f1f1;
+        }
+
+        /* Style the buttons inside the tab */
+        .tab button {
+            background-color: inherit;
+            float: left;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 14px 16px;
+            transition: 0.3s;
+            font-size: 17px;
+        }
+
+        /* Change background color of buttons on hover */
+        .tab button:hover {
+            background-color: #ddd;
+        }
+
+        /* Create an active/current tablink class */
+        .tab button.active {
+            background-color: #ccc;
+        }
+
+        /* Style the tab content */
+        .searchbar {
+            display: inline-flex;
+            padding: 6px 12px;
+            border-top: none;
+        }
+
+        .searchbar label {
+            padding: 12px 12px 12px 0;
+            margin-left: 10px;
+            display: inline-flex;
+        }
+
+
+        .searchbar form input[type="submit"] {
+            margin-top: 10px;
+            margin-left: 20px;
+        }
+    </style>
+    <script type="text/javascript">
+        function confirmBack() {
+            var result = confirm('Sind Sie sicher, dass Sie zur vorigen Seite zurückkehren wollen?');
+            if (result) {
+                window.history.back();
+            }
+        }
+    </script>
+</head>
+
+<body>
+    <div class="showtable">
+        <h1>Tabelle {{ table_name }}</h1>
+        <div class="tab">
+            <button class="tablinks" onclick="searchOrReplace(event, 'searchbox')" id="defaultOpen">Suchen</button>
+            <button class="tablinks" onclick="searchOrReplace(event, 'replacebox')">Suchen und Ersetzen</button>
+        </div>
+        <div class="searchbar">
+            <form action="/search" method="POST">
+                <ul>
+                    <li>
+                        <div id="searchbox">
+                            <label for="columntosearch">Spalte auswählen:</label>
+                            <select name="columntosearch" id="columntosearch" required>
+                                <option value="all">Alle Spalten</option>
+                                {% for column in table_columns %}
+                                <option value="{{ column }}">{{ column }}</option>
+                                {% endfor %}
+                            </select>
+                            <label for="searchstring">Suchen:</label>
+                            <input type="text" id="searchstring" name="searchstring"
+                                placeholder="ggf. zu vereinheitlichende Werte durch Komma getrennt eingeben">
+                        </div>
+                    </li>
+                    <li>
+                        <div id="replacebox">
+                            <label for="replacementstring">Ersetzen durch:</label>
+                            <input type="text" id="replacementstring" name="replacementstring"
+                                placeholder="Ersetzen durch ...">
+                        </div>
+                    </li>
+                    <li>
+                        <div>
+                            <input type="submit" value="Absenden">
+                        </div>
+                    </li>
+                </ul>
+                </ul>
+            </form>
+        </div>
+
+        <hr>
+        <div id="table"></div>
+        <div class="links">
+            <a href="{{ url_for('list_tables') }}"><button onclick="{confirmBack()}"> Zurück </button></a>
+        </div>
+    </div>
+    <script>
+        // Anzeige der Felder je nachdem, ob die Funktion "Suchen" oder "Suchen und Ersetzen ausgewählt wurde"
+        function searchOrReplace(evt, choice) {
+            var i, tablinks;
+            if (choice == "replacebox") {
+                document.getElementById(choice).style.display = "block";
+            }
+            else {
+                document.getElementById("replacebox").style.display = "none";
+            }
+            tablinks = document.getElementsByClassName("tablinks");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].className = tablinks[i].className.replace(" active", "");
+            }
+            evt.currentTarget.className += " active";
+        }
+        // "Anklicken" des Elements mit id="defaultOpen" durch JavaScript
+        document.getElementById("defaultOpen").click();
+    </script>
+    <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+    <script>
+        //const tableNamesAsJson = "{{ table_header | tojson | safe }}";
+        new gridjs.Grid({
+            columns: [
+                { id: 'name', name: 'Name' },
+                { id: 'age', name: 'Age' },
+                { id: 'address', name: 'Address', sort: false },
+                { id: 'phone', name: 'Phone Number', sort: false },
+                { id: 'email', name: 'Email' },
+            ],
+            data: [
+            ],
+            search: {
+                selector: (cell, rowIndex, cellIndex) => [0, 1, 4].includes(cellIndex) ? cell : null,
+            },
+            sort: true,
+            pagination: true,
+            language: {
+                'search': {
+                    'placeholder': '🔍 Suche...'
+                },
+                'pagination': {
+                    'previous': 'Vorige',
+                    'next': 'Nächste',
+                    navigate: (page, pages) => `Seite ${page} von ${pages}`,
+                    page: (page) => `Seite ${page}`,
+                    'showing': 'Zeige',
+                    of: 'von',
+                    to: 'bis',
+                    'results': () => 'Einträge'
+                },
+                loading: 'Lade...',
+                noRecordsFound: 'Keine passenden Einträge gefunden',
+                error: 'Beim Einlesen der Daten ist ein Fehler aufgetreten.',
+            }
+        }).render(document.getElementById('table'));
+    </script>
+    </script>
+
+</body>
+
+</html>
