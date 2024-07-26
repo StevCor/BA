@@ -122,8 +122,9 @@
         <hr>
         <div id="table"></div>
         <div class="links">
-            <a href="{{ url_for('list_tables') }}"><button onclick="{confirmBack()}"> Zurück </button></a>
+            <a href="{{ url_for('select_tables') }}"><button onclick="{confirmBack()}"> Zurück </button></a>
         </div>
+        <div data-list='{{ table_columns | tojson | safe }}' id="list-container"></div>
     </div>
     <script>
         // Anzeige der Felder je nachdem, ob die Funktion "Suchen" oder "Suchen und Ersetzen ausgewählt wurde"
@@ -144,45 +145,7 @@
         // "Anklicken" des Elements mit id="defaultOpen" durch JavaScript
         document.getElementById("defaultOpen").click();
     </script>
-    <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
-    <script>
-        //const tableNamesAsJson = "{{ table_header | tojson | safe }}";
-        new gridjs.Grid({
-            columns: [
-                { id: 'name', name: 'Name' },
-                { id: 'age', name: 'Age' },
-                { id: 'address', name: 'Address', sort: false },
-                { id: 'phone', name: 'Phone Number', sort: false },
-                { id: 'email', name: 'Email' },
-            ],
-            data: [
-            ],
-            search: {
-                selector: (cell, rowIndex, cellIndex) => [0, 1, 4].includes(cellIndex) ? cell : null,
-            },
-            sort: true,
-            pagination: true,
-            language: {
-                'search': {
-                    'placeholder': '🔍 Suche...'
-                },
-                'pagination': {
-                    'previous': 'Vorige',
-                    'next': 'Nächste',
-                    navigate: (page, pages) => `Seite ${page} von ${pages}`,
-                    page: (page) => `Seite ${page}`,
-                    'showing': 'Zeige',
-                    of: 'von',
-                    to: 'bis',
-                    'results': () => 'Einträge'
-                },
-                loading: 'Lade...',
-                noRecordsFound: 'Keine passenden Einträge gefunden',
-                error: 'Beim Einlesen der Daten ist ein Fehler aufgetreten.',
-            }
-        }).render(document.getElementById('table'));
-    </script>
-    </script>
+    {% include 'grid.html' %}
 
 </body>
 

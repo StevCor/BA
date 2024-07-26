@@ -16,8 +16,8 @@
 
 <body>
     <div class="selecttable">
-        <h1>Auswahl der Tabellen aus der aktiven Datenbank {{ dbname }}</h1>
-        <h3>Bitte wählen Sie bis zu zwei Tabellen der Datenbank {{ dbname }} aus, um mit diesen zu arbeiten:</h3>
+        <h1>Auswahl der Tabellen aus der aktiven Datenbank {{ db_name }}</h1>
+        <h3>Bitte wählen Sie bis zu zwei Tabellen der Datenbank {{ db_name }} aus, um mit diesen zu arbeiten:</h3>
         <form action="/tables" method="POST">
             <div class="tablelist">
                 <div class="listcolumntitle">
@@ -39,8 +39,9 @@
             <div class="buttons">
                 <div class="links">
                     <a href="{{ url_for('login_to_one_db') }}"><button onclick="confirmBack()">Zurück</button></a>
-                    <a href="{{ url_for('list_tables') }}"><button> Abbrechen </button></a>
+                    <a href="{{ url_for('select_tables') }}"><button> Abbrechen </button></a>
                 </div>
+                <input type="hidden" id="engineno" name="engineno" value="{{ engine_no }}">
                 <input type="submit" value="Tabellen auswählen">
             </div>
 

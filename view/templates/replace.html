@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <title>SQL-Datenbanken: Einträge vereinheitlichen</title>
+    {% include 'css.html' %}
+
+</head>
+
+<body>
+    <input type="hidden" id="database_name" value="{{ db_name }}">
+
+    <div class="unify">
+        <div class="connection">
+            <h3>Verbunden mit Datenbank {{ db_name }}, Tabelle {{ table_name }} </h3>
+            <a href="{{ url_for('disconnect_from_single_db') }}"><button
+                    onclick="return confirm('Sind Sie sicher? Sie kehren dann zur Anmeldeseite zurück.')"> Verbindung
+                    trennen </button></a>
+        </div>
+
+        <div class="links">
+            <a href="{{ url_for('search_entries') }}">Suchen</a>
+            <a href="{{ url_for('search_and_replace_entries') }}" class="active">Suchen und Ersetzen</a>
+            <a href="{{ url_for('unify_db_entries') }}">Vereinheitlichen</a>
+        </div>
+        <form action="{{ '/unify' }}" method="POST">
+            <label for="columntosearch">Spalte auswählen:</label>
+            <select name="columntosearch" id="columntosearch" required>
+                <option value="all">Alle Spalten</option>
+                {% for column in table_columns %}
+                <option value="{{ column }}">{{ column }}</option>
+                {% endfor %}
+            </select>
+            <label for="searchstring">Suchen</label>
+            <input type="text" id="searchstring" name="searchstring">
+            <label for="replacement">Ersetzen durch</label>
+            <input type="text" id="replacement" name="replacement">
+            <input type="hidden" id="engine" name="engine" value="{{ engine_no }}">
+            <input type="hidden" id="table" name="table" value="{{ table_name }}">
+            <input type="submit" value="Vorschau">
+
+        </form>
+        <div id="table"></div>
+        <div data-list='{{ table_columns | tojson | safe }}' id="list-container"></div>
+
+    </div>
+    {% include 'grid.html' %}
+</body>
+
+</html>

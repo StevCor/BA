@@ -1,0 +1,34 @@
+<script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+<script>
+    var container = document.querySelector('#list-container');
+    var js_array = JSON.parse(container.getAttribute('data-list'));
+    var data = {{ data | tojson | safe }}
+    new gridjs.Grid({
+        columns: js_array,
+        data: data,
+        /* search: {
+            selector: (cell, rowIndex, cellIndex) => [0, 1, 4].includes(cellIndex) ? cell : null,
+        },*/
+        search: false,
+        sort: true,
+        pagination: true,
+        language: {
+            'search': {
+                'placeholder': '🔍 Suche...'
+            },
+            'pagination': {
+                'previous': 'Vorige',
+                'next': 'Nächste',
+                navigate: (page, pages) => `Seite ${page} von ${pages}`,
+                page: (page) => `Seite ${page}`,
+                'showing': 'Zeige',
+                of: 'von',
+                to: 'bis',
+                'results': () => 'Einträge'
+            },
+            loading: 'Lade...',
+            noRecordsFound: 'Keine passenden Einträge gefunden',
+            error: 'Beim Einlesen der Daten ist ein Fehler aufgetreten.',
+        }
+    }).render(document.getElementById('table'));
+</script>

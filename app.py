@@ -1,19 +1,21 @@
-from flask import Flask, render_template, request, flash, redirect, session, abort, url_for
-from sqlalchemy import text
+from flask import Flask, render_template, request, flash, redirect, session, abort, url_for, jsonify
 import os
 from waitress import serve
-from controller.loginController import login, register_user
-from controller.databaseController import connect_to_db, get_tables_in_db
 from model.SQLDatabaseError import DatabaseError
+from model.loginModel import register_new_user, login_user 
+from model.databaseModel import connect_to_db, list_all_tables_in_db, get_column_names_and_datatypes_from_engine, get_primary_key_from_engine, get_full_table, search_string
 
 global engine_1
 global engine_2
 global db_in_use
+global tables_in_use
+global metadata_table_1
+global metadata_table_2
 
 engine_1 = None
 engine_2 = None
 db_in_use = 0 # 0: keine Engine, 1: engine_1 ist nutzbar, 2: engine_2 ist nutzbar, 3: engine_ und engine_2 sind nutzbar
-
+tables_in_use = 0
 
 app = Flask(__name__, template_folder = 'view/templates', static_folder = 'view/static')
 
@@ -33,7 +35,7 @@ def check_login():
     message = ''
     flash('Hi!')
     if request.method == 'POST':
-        result = login(request.form['username'], request.form['password'])
+        result = login_user(request.form['username'], request.form['password'])
         if result[0] == True:
             session['logged_in'] = True
             session['username'] = request.form['username']
@@ -47,7 +49,7 @@ def register():
     message = ''
     print(request)
     if request.method == 'POST':
-        message = register_user(request.form['username'], request.form['password'])
+        message = register_new_user(request.form['username'], request.form['password'])
     return render_template('register.html', message = message)
 
 @app.route('/singledb', methods = ['POST', 'GET'])
@@ -71,25 +73,111 @@ def login_to_one_db():
             else:
                 if 'onedb' in request.form.keys():
                     tables = dict()
+                    engine_no = 0
                     if db_in_use == 1:
-                        tables = get_tables_in_db(engine_1)
+                        tables = list_all_tables_in_db(engine_1)
+                        engine_no = 1
                     elif db_in_use == 2:
-                        tables = get_tables_in_db(engine_2)
-                    return render_template('tables.html', dbname = db_name, tables = tables, message = message)
+                        tables = list_all_tables_in_db(engine_2)
+                        engine_no = 2
+                    return render_template('tables.html', engine_no = engine_no, db_name = db_name, tables = tables, message = message)
                 elif 'twodbs' in request.form.keys():
                     return render_template('tables.html')
         elif request.method == 'GET':
             return render_template('singledb.html', username = session['username'])
    
+@app.route('/search', methods = ['POST', 'GET'] )
+def search_entries():
+    db_name = engine_1.url.database
+    table_name = metadata_table_1.table
+    table_columns = metadata_table_1.columns
+    searched_string = ''
+    data = []
+    if request.method == 'GET':
+        data = convert_result_to_list_of_tuples(get_full_table(engine_1, table_name))
+    elif request.method == 'POST':
+        column_name = request.form['columntosearch']
+        column_names_and_datatypes = dict()
+        if column_name == 'all':
+            column_names_and_datatypes = metadata_table_1.column_names_and_datatypes
+        else:
+            column_names_and_datatypes = {column_name: metadata_table_1.column_names_and_datatypes[column_name]}
+        string_to_search = request.form['searchstring']
+        if string_to_search.strip() == '':
+            data = convert_result_to_list_of_tuples(get_full_table(engine_1, table_name))
+        else:
+            data = convert_result_to_list_of_tuples(search_string(engine_1, table_name, column_names_and_datatypes, string_to_search))
+        searched_string = string_to_search
+    return render_template('search.html', db_name = db_name, table_name = table_name, searched_string = searched_string, searched_column = column_name, table_columns = table_columns, data = data)
+
+@app.route('/replace')
+def search_and_replace_entries():
+    db_name = engine_1.url.database
+    table_name = request.form['table']
+    if request.method == 'GET':
+    
+        return render_template('replace.html', db_name = db_name, table_name = table_name)
+    elif request.method == 'POST':
+        return None
+
+@app.route('/unify')
+def unify_db_entries():
+    global engine_1
+    db_name = engine_1.url.database
+    table_name = request.form['table']
+    if request.method == 'GET':
+        return render_template('unify.html', db_name = db_name, table_name = table_name)
+    elif request.method == 'POST':
+        return None
+
+@app.route('/disconnect')
+def disconnect_from_single_db():
+    global engine_1
+    global db_in_use
+    engine_1 = None
+    db_in_use = 0
+    return render_template('singledb.html', username = session['username'])
+
 
 @app.route('/twodbs')
 def login_to_two_dbs():
     return None
 
 @app.route('/tables', methods=['POST'])
-def list_tables():
-    table_name = request.form['selectedtable'].capitalize()
-    return render_template('onetable.html', table_name = table_name, table_columns = ['Matrikelnummer', 'Vorname', 'Nachname'], table_header = [{'id':'matrikelnummer', 'name': 'Matrikelnummer'}, {'id': 'vorname', 'name': 'Vorname'}, {'id': 'nachname', 'name': 'Nachname'}])
+def select_tables():
+    print(request)
+    global tables_in_use
+    global metadata_table_1
+    global metadata_table_2
+    engine_no = int(request.form['engineno'])
+    engine = None
+    table_name = request.form['selectedtable']
+    columns = ['Matrikelnummer', 'Vorname', 'Nachname']
+    if len(request.form.getlist('selectedtable')) == 1:
+        print(tables_in_use)
+        print(engine_no)
+        if engine_no == 1:
+                engine = engine_1
+        elif engine_no == 2:
+            engine = engine_2
+
+        if tables_in_use == 0:
+            tables_in_use += 1
+            metadata_table_1 = TableMetaData(engine, table_name)
+            columns = metadata_table_1.columns
+        elif tables_in_use == 1:
+            tables_in_use += 2
+            metadata_table_2 = TableMetaData(engine, table_name)
+            columns = metadata_table_2.columns
+        else:
+            tables = list_all_tables_in_db(engine)
+            return render_template('tables.html', engine_no = engine_no, db_name = engine.url.database, tables = tables, message = 'Sie haben bereits zwei Tabellen ausgewählt.')
+        data = convert_result_to_list_of_tuples(get_full_table(engine, table_name))
+        return render_template('onetable.html', table_name = table_name, table_columns = columns, data = data)
+    else:
+        table_names = request.form.getlist('selectedtable')
+        print(table_names)
+        return render_template('onetable.html', table_name = table_names, table_columns = columns)
     
 @app.route('/logout')
 def logout():
@@ -97,8 +185,12 @@ def logout():
     session.pop('loggedin', None)
     session.pop('username', None)
     # Engines zurücksetzen
+    global engine_1
+    global engine_2
+    global db_in_use
     engine_1 = None
     engine_2 = None
+    db_in_use = 0
     # Weiterleitung zur Login-Seite
     return render_template('login.html', 
                            message = 'Sie wurden erfolgreich abgemeldet. \nBitte loggen Sie sich wieder ein, um das Tool zu nutzen.')
@@ -118,6 +210,7 @@ def login_to_db(username, password, host, port, db_name, db_dialect, db_encoding
         try: 
             db_engine = connect_to_db(username, password, host, port, db_name, db_dialect, db_encoding)
         except DatabaseError as error:
+            status = 1
             message = str(error)
         else:
             if not engine_1:
@@ -130,7 +223,22 @@ def login_to_db(username, password, host, port, db_name, db_dialect, db_encoding
                 message = f'Verbindung zur Datenbank {db_name} aufgebaut.'
     return message, status
 
+def convert_result_to_list_of_tuples(sql_result):
+    result_list = [tuple(row) for row in sql_result.all()]
+    return result_list  
 
+class TableMetaData:
+    def __init__(self, engine, table_name):
+        self.engine = engine
+        self.table = table_name
+        column_names_and_datatypes = get_column_names_and_datatypes_from_engine(engine, table_name)
+        primary_keys = get_primary_key_from_engine(engine, table_name)
+        self.primary_keys = primary_keys
+        self.columns = list(column_names_and_datatypes.keys())
+        self.data_types = []
+        for key in column_names_and_datatypes.keys():
+            self.data_types.append(column_names_and_datatypes[key])
+        self.column_names_and_datatypes = column_names_and_datatypes
 
 
 if __name__ == '__main__':

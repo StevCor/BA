@@ -3,8 +3,6 @@ class DatabaseError(Exception):
     def __init__(self, message:str):
         super().__init__(f'Fehler beim Aufbau der Datenbankverbindung. {message}')
 
-
-
 class QueryError(Exception):
     """Exception für Fehler bei der Erstellung von Datenbankanfragen."""
     def __init__(self, message:str):
