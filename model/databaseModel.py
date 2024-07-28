@@ -101,7 +101,12 @@ def list_all_tables_in_db(engine):
 def get_full_table(engine, table_name:str):
     with engine.connect() as connection:
         result = connection.execute(text(f'SELECT * FROM {table_name}')) 
-        return result     
+        return result   
+
+def get_full_table_ordered_by_primary_key(engine, table_name:str, primary_keys:list):
+    with engine.connect() as connection:
+        result = connection.execute(text(f'SELECT * FROM {table_name} ORDER BY {primary_keys[0]}'))  
+        return result
 
 def search_string(engine, table_name:str, cols_and_dtypes:dict, string_to_search:str):
     primary_key = str()
@@ -208,6 +213,122 @@ def replace_one_string(engine, table_name:str, column_name:str, string_to_replac
 #                             print curDst.mogrify(query,param )
 #                         curDst.execute( query, param )
 
+
+
+def update_to_unify_entries(engine, table_name:str, attribute_to_change:str, old_values:list, new_value:str):
+    query = f'UPDATE {convert_string_if_contains_capitals(table_name)} SET {convert_string_if_contains_capitals(attribute_to_change)} = :new_value'
+    cols_and_dtypes = get_column_names_and_datatypes_from_engine(engine, table_name)
+    dtype_is_int_or_float = datatype_is_int_or_float(engine, cols_and_dtypes)
+    condition_dict = {}
+    print(old_values)
+    for index, key in enumerate(cols_and_dtypes.keys()):
+        if key == attribute_to_change:
+            if dtype_is_int_or_float[key][1] == 1:
+                new_value = int(new_value)
+                for item in old_values:
+                    item = int(item)
+                break
+            elif dtype_is_int_or_float[key][1] == 2:
+                new_value = float(new_value)
+                for item in old_values:
+                    item = float(item)
+                break 
+    condition_dict['new_value'] = new_value
+    condition = 'WHERE'
+    for index, value in enumerate(old_values):
+        if index == 0:
+            condition = f'{condition} {convert_string_if_contains_capitals(attribute_to_change)} = :value_{str(index)}'
+        else:
+            condition = f'{condition} OR {convert_string_if_contains_capitals(attribute_to_change)} = :value_{str(index)}'
+        condition_dict['value_' + str(index)] = value
+    query = text(f'{query} {condition}')
+    params = [new_value] + old_values
+    print('UPDATE-Anweisung:', query)
+    for key in condition_dict.keys():
+        query.bindparams(bindparam(key))
+    with engine.connect() as connection:
+        result = connection.execute(query, condition_dict)
+        connection.commit()
+    return result
+
+
+# def datatype_is_int_or_float(engine, cols_and_dtypes:dict):
+#     # Liste mit Hinweisen, ob beim Einfügen in die Datenbank Datentypumwandlungen nötig sind, weil alle Daten vom Client Strings sind
+#     # 2 für Kommazahlen, 1 für ganze Zahlen, 0 für nicht numerische Datentypen
+#     dtype_is_int_or_float = []
+#     for key in cols_and_dtypes.keys():
+#         item = cols_and_dtypes[key]
+#         print(item)
+#         if is_number(item, engine.dialect.name):
+#             if is_decimal_number(item):
+#                 dtype_is_int_or_float.append(2)
+#             else: 
+#                 dtype_is_int_or_float.append(1)
+#         else:
+#             dtype_is_int_or_float.append(0)
+#     return dtype_is_int_or_float
+
+def datatype_is_int_or_float(engine, cols_and_dtypes:dict):
+    dtype_is_int_or_float = {}
+    for key in cols_and_dtypes.keys():
+        item = cols_and_dtypes[key]
+        if is_number(item, engine.dialect.name):
+            if is_decimal_number(item):
+                dtype_is_int_or_float[key] = [item, 2]
+            else: 
+                dtype_is_int_or_float[key] = [item, 1]
+        else:
+            dtype_is_int_or_float[key] = [item, 0]
+    return dtype_is_int_or_float
+
+def  get_row_number_of_affected_entries(engine, table_name, affected_attribute, primary_keys:list, old_values):
+    key_for_ordering = primary_keys[0]
+    condition = 'WHERE'
+    condition_dict = {}
+    cols_and_dtypes = get_column_names_and_datatypes_from_engine(engine, table_name)
+    dtype_is_int_or_float = datatype_is_int_or_float(engine, cols_and_dtypes)
+
+    for index, value in enumerate(old_values):
+        if dtype_is_int_or_float[affected_attribute][1] == 0:
+            condition_dict['value_' + str(index)] = value
+        elif dtype_is_int_or_float[affected_attribute][1] == 1:
+            condition_dict['value_' + str(index)] = int(value)
+        elif dtype_is_int_or_float[affected_attribute][1] == 2:
+            condition_dict['value_' + str(index)] = float(value)
+
+        if index == 0:
+            condition = f"{condition} sub.{convert_string_if_contains_capitals(affected_attribute)} = :{'value_' + str(index)}"
+        else:
+            condition = f"{condition} OR sub.{convert_string_if_contains_capitals(affected_attribute)} = :{'value_' + str(index)}"
+    
+    # for index, value in enumerate(old_values):
+    #     print(dtype_is_int_or_float[0])
+    #     print('value: ', value, type(value), dtype_is_int_or_float[index])
+    #     if dtype_is_int_or_float[index] == 0:
+    #         condition_dict['value_' + str(index)] = value
+    #     elif dtype_is_int_or_float[index] == 1:
+    #         condition_dict['value_' + str(index)] = int(value)
+    #     elif dtype_is_int_or_float[index] == 2:
+    #         condition_dict['value_' + str(index)] = float(value)
+
+    #     if index == 0:
+    #         condition = f"{condition} sub.{convert_string_if_contains_capitals(affected_attribute)} = :{'value_' + str(index)}"
+    #     else:
+    #         condition = f"{condition} OR sub.{convert_string_if_contains_capitals(affected_attribute)} = :{'value_' + str(index)}"
+    query = text(f"SELECT * FROM (SELECT ROW_NUMBER() OVER (ORDER BY {key_for_ordering}) AS Nr, * FROM {table_name}) sub {condition}")
+    print(query)
+    for key in condition_dict.keys():
+        query.bindparams(bindparam(key))
+    with engine.connect() as connection:
+        result = connection.execute(query, condition_dict)
+    return result
+
+def get_unique_values_for_attribute(engine, table_name, attribute_to_search:str):
+    query = f'SELECT DISTINCT {attribute_to_search}, COUNT(*) AS Eintragsanzahl FROM {table_name} GROUP BY {attribute_to_search}'
+    with engine.connect() as connection:
+        result = connection.execute(text(query))
+    return result
+
 def get_column_names_and_datatypes_from_engine(engine, table_name):
     query = ''
     if engine.dialect.name == 'postgresql':
@@ -273,6 +394,11 @@ def get_primary_key_names_and_datatypes_from_engine(engine, table_name:str):
     print(key_datatype_dict)
     return key_datatype_dict
 
+def get_row_count_from_engine(engine, table_name:str):
+    with engine.connect() as connection:
+        res = connection.execute(text(f'SELECT COUNT(1) FROM {table_name}'))
+        return res.fetchone()[0] 
+
 def build_update_query(table_name:str, column_names_of_affected_attributes:tuple, column_names_of_condition:tuple, values:tuple, operator:str):
     table_name = convert_string_if_contains_capitals(table_name)
     if len(column_names_of_affected_attributes) + len(column_names_of_condition) != len(values):
@@ -327,6 +453,12 @@ def is_number(data_type:str, db_dialect:str):
         return True
     elif db_dialect == 'mariadb' and data_type.lower() in ('tinyint', 'boolean', 'int1', 'smallint', 'int2', 'mediumint', 'int3', 'int', 'integer', 'int4', 'bigint', 'int8', 'decimal', 'dec', 'numeric', 'fixed', 'float', 'double', 'double precision', 'real', 'bit'):
         return True    
+    else:
+        return False
+    
+def is_decimal_number(data_type:str):
+    if data_type in ('decimal', 'dec', 'numeric', 'real', 'double precision', 'double', 'fixed', 'float'):
+        return True
     else:
         return False
 

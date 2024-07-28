@@ -2,7 +2,7 @@
 <html lang="de">
 
 <head>
-    <title>SQL-Datenbanken: Suchen und Ersetzen</title>
+    <title>SQL-Datenbanken: Vorschau</title>
     {% include 'css.html' %}
 
 </head>
@@ -10,7 +10,7 @@
 <body>
     <input type="hidden" id="database_name" value="{{ db_name }}">
 
-    <div class="replace">
+    <div class="unify">
         <div class="connection">
             <h3>Verbunden mit Datenbank {{ db_name }}, Tabelle {{ table_name }} </h3>
             <a href="{{ url_for('disconnect_from_single_db') }}"><button
@@ -35,31 +35,34 @@
             <input type="text" id="searchstring" name="searchstring">
             <label for="replacement">Ersetzen durch</label>
             <input type="text" id="replacement" name="replacement">
-            <input type="hidden" id="engineno" name="engineno" value="{{ engine_no }}">
-            <input type="hidden" id="tablename" name="tablename" value="{{ table_name }}">
+            <input type="hidden" id="engine" name="engine" value="{{ engine_no }}">
+            <input type="hidden" id="table" name="table" value="{{ table_name }}">
             <input type="submit" id="preview" value="Vorschau">
 
         </form>
-        <div id="table"></div>
-        <div data-list='{{ table_columns | tojson | safe }}' id="list-container"></div>
+
+        <table id="preview">
+            <thead>
+                <tr>
+                    <th><input type="checkbox" /></th>
+                    {% for column in table_columns %}
+                    <th>{{ column }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in data %}
+                <tr>
+                    <td><input type="checkbox" value="{{ row }}"></td>
+                    {% for item in row %}
+                    <td>{{ item }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
 
     </div>
-    {% include 'grid.html' %}
-    <script>
-        const send = document.querySelector("#preview");
-
-        send.addEventListener("click", async () => {
-            const replaceInfo = document.querySelector("#replaceparams");
-            const formData = new FormData(replaceInfo);
-
-            const response = await fetch("{{ url_for('search_and_replace_entries')}}", {
-                method: "POST",
-                body: formData,
-            });
-            console.log(await response.json());
-        });
-
-    </script>
 </body>
 
 </html>

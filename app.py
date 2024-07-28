@@ -1,9 +1,10 @@
 from flask import Flask, render_template, request, flash, redirect, session, abort, url_for, jsonify
 import os
+import re
 from waitress import serve
 from model.SQLDatabaseError import DatabaseError
 from model.loginModel import register_new_user, login_user 
-from model.databaseModel import connect_to_db, list_all_tables_in_db, get_column_names_and_datatypes_from_engine, get_primary_key_from_engine, get_full_table, search_string
+from model.databaseModel import connect_to_db, list_all_tables_in_db, get_column_names_and_datatypes_from_engine, get_primary_key_from_engine, search_string, get_row_count_from_engine, get_full_table, get_full_table_ordered_by_primary_key, get_unique_values_for_attribute, get_row_number_of_affected_entries, update_to_unify_entries
 
 global engine_1
 global engine_2
@@ -85,6 +86,42 @@ def login_to_one_db():
                     return render_template('tables.html')
         elif request.method == 'GET':
             return render_template('singledb.html', username = session['username'])
+        
+@app.route('/tables', methods=['POST'])
+def select_tables():
+    print(request)
+    global tables_in_use
+    global metadata_table_1
+    global metadata_table_2
+    engine_no = int(request.form['engineno'])
+    engine = None
+    table_name = request.form['selectedtable']
+    columns = ['Matrikelnummer', 'Vorname', 'Nachname']
+    if len(request.form.getlist('selectedtable')) == 1:
+        print(tables_in_use)
+        print(engine_no)
+        if engine_no == 1:
+            engine = engine_1
+        elif engine_no == 2:
+            engine = engine_2
+        count = get_row_count_from_engine(engine, table_name)
+        if tables_in_use == 0:
+            tables_in_use += 1
+            metadata_table_1 = TableMetaData(engine, table_name, count)
+            columns = metadata_table_1.columns
+        elif tables_in_use == 1:
+            tables_in_use += 2
+            metadata_table_2 = TableMetaData(engine, table_name, count)
+            columns = metadata_table_2.columns
+        else:
+            tables = list_all_tables_in_db(engine)
+            return render_template('tables.html', engine_no = engine_no, db_name = engine.url.database, tables = tables, message = 'Sie haben bereits zwei Tabellen ausgewählt.')
+        data = convert_result_to_list_of_tuples(get_full_table(engine, table_name))
+        return render_template('onetable.html', table_name = table_name, table_columns = columns, data = data)
+    else:
+        table_names = request.form.getlist('selectedtable')
+        print(table_names)
+        return render_template('onetable.html', table_name = table_names, table_columns = columns)
    
 @app.route('/search', methods = ['POST', 'GET'] )
 def search_entries():
@@ -108,7 +145,7 @@ def search_entries():
         else:
             data = convert_result_to_list_of_tuples(search_string(engine_1, table_name, column_names_and_datatypes, string_to_search))
         searched_string = string_to_search
-    return render_template('search.html', db_name = db_name, table_name = table_name, searched_string = searched_string, searched_column = column_name, table_columns = table_columns, data = data)
+    return render_template('search.html', db_name = db_name, table_name = table_name, searched_string = searched_string, table_columns = table_columns, data = data)
 
 @app.route('/replace')
 def search_and_replace_entries():
@@ -120,15 +157,66 @@ def search_and_replace_entries():
     elif request.method == 'POST':
         return None
 
-@app.route('/unify')
-def unify_db_entries():
-    global engine_1
+
+@app.route('/unify-selection', methods = ['POST'])
+def select_entries_to_unify():
     db_name = engine_1.url.database
-    table_name = request.form['table']
+    table_name = request.form['tablename']
+    column_to_unify = request.form['columntounify']
+    data = convert_result_to_list_of_tuples(get_unique_values_for_attribute(engine_1, table_name, column_to_unify))
+    return render_template('unify-selection.html', db_name = db_name, table_name = table_name, column_to_unify = column_to_unify, data = data, engine_no = 1)
+
+@app.route('/unify-preview', methods = ['POST'])
+def show_affected_entries():
+    print(request)
+    db_name = engine_1.url.database
+    table_name = metadata_table_1.table
+    table_columns = metadata_table_1.columns
+    column_to_unify = request.form['columntounify']
+    new_value = request.form['replacement']
+    index_of_affected_attribute = 0
+    primary_keys = metadata_table_1.primary_keys
+    old_values = list()
+    for key in request.form.keys():
+        if re.match(r'^[0-9]+$', key):
+            old_values.append(request.form[key])
+    print(old_values)
+    data = convert_result_to_list_of_tuples(get_full_table_ordered_by_primary_key(engine_1, table_name, primary_keys))
+    affected_entries = convert_result_to_list_of_tuples(get_row_number_of_affected_entries(engine_1, table_name, column_to_unify, metadata_table_1.primary_keys, old_values))
+    affected_rows = []
+    for row in affected_entries:
+        affected_rows.append(row[0])
+    row_total = metadata_table_1.total_row_count
+    for index, column in enumerate(table_columns):
+        if column == column_to_unify:
+            index_of_affected_attribute = index + 1
+            break
+    
+    return render_template('unify-preview.html', db_name = db_name, table_name = table_name, table_columns = table_columns, column_to_unify = column_to_unify, old_values = old_values, new_value = new_value, data = data, index_of_affected_attribute = index_of_affected_attribute, affected_rows = affected_rows, row_total = row_total)
+
+@app.route('/unify', methods = ['GET', 'POST'])
+def unify_db_entries():
+    db_name = engine_1.url.database
+    table_name = metadata_table_1.table
+    table_columns = metadata_table_1.columns
+    primary_keys = metadata_table_1.primary_keys
+    message = ''
+    for item in request.args:
+        print(item)
     if request.method == 'GET':
-        return render_template('unify.html', db_name = db_name, table_name = table_name)
+        data = convert_result_to_list_of_tuples(get_full_table(engine_1, table_name))
     elif request.method == 'POST':
-        return None
+        attribute_to_change = request.form['columntounify']
+        # \ wird beim Auslesen zu \\ -> muss rückgängig gemacht werden, weil Parameter zweimal an HTML-Dokumente gesendet wird
+        old_values = request.form['oldvalues'].replace('[', '').replace(']', '').replace('\'', '').replace('\\\\', '\\').split(', ')
+        new_value = request.form['newvalue']
+        message = 'Änderungen erfolgreich durchgeführt.'
+        try:
+            update_to_unify_entries(engine_1, table_name, attribute_to_change, old_values, new_value)
+        except Exception as error:
+            message = str(error)
+        data = convert_result_to_list_of_tuples(get_full_table(engine_1, table_name))
+    return render_template('unify.html', db_name = db_name, table_columns = table_columns, primary_keys = primary_keys, data = data, table_name = table_name, engine_no = 1, message = message)
 
 @app.route('/disconnect')
 def disconnect_from_single_db():
@@ -142,42 +230,6 @@ def disconnect_from_single_db():
 @app.route('/twodbs')
 def login_to_two_dbs():
     return None
-
-@app.route('/tables', methods=['POST'])
-def select_tables():
-    print(request)
-    global tables_in_use
-    global metadata_table_1
-    global metadata_table_2
-    engine_no = int(request.form['engineno'])
-    engine = None
-    table_name = request.form['selectedtable']
-    columns = ['Matrikelnummer', 'Vorname', 'Nachname']
-    if len(request.form.getlist('selectedtable')) == 1:
-        print(tables_in_use)
-        print(engine_no)
-        if engine_no == 1:
-                engine = engine_1
-        elif engine_no == 2:
-            engine = engine_2
-
-        if tables_in_use == 0:
-            tables_in_use += 1
-            metadata_table_1 = TableMetaData(engine, table_name)
-            columns = metadata_table_1.columns
-        elif tables_in_use == 1:
-            tables_in_use += 2
-            metadata_table_2 = TableMetaData(engine, table_name)
-            columns = metadata_table_2.columns
-        else:
-            tables = list_all_tables_in_db(engine)
-            return render_template('tables.html', engine_no = engine_no, db_name = engine.url.database, tables = tables, message = 'Sie haben bereits zwei Tabellen ausgewählt.')
-        data = convert_result_to_list_of_tuples(get_full_table(engine, table_name))
-        return render_template('onetable.html', table_name = table_name, table_columns = columns, data = data)
-    else:
-        table_names = request.form.getlist('selectedtable')
-        print(table_names)
-        return render_template('onetable.html', table_name = table_names, table_columns = columns)
     
 @app.route('/logout')
 def logout():
@@ -228,7 +280,7 @@ def convert_result_to_list_of_tuples(sql_result):
     return result_list  
 
 class TableMetaData:
-    def __init__(self, engine, table_name):
+    def __init__(self, engine, table_name, row_count):
         self.engine = engine
         self.table = table_name
         column_names_and_datatypes = get_column_names_and_datatypes_from_engine(engine, table_name)
@@ -239,6 +291,7 @@ class TableMetaData:
         for key in column_names_and_datatypes.keys():
             self.data_types.append(column_names_and_datatypes[key])
         self.column_names_and_datatypes = column_names_and_datatypes
+        self.total_row_count = row_count
 
 
 if __name__ == '__main__':
