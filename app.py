@@ -4,7 +4,7 @@ import re
 from waitress import serve
 from model.SQLDatabaseError import DatabaseError
 from model.loginModel import register_new_user, login_user 
-from model.databaseModel import connect_to_db, list_all_tables_in_db, get_column_names_and_datatypes_from_engine, get_primary_key_from_engine, search_string, get_row_count_from_engine, get_full_table, get_full_table_ordered_by_primary_key, get_unique_values_for_attribute, get_row_number_of_affected_entries, update_to_unify_entries
+from model.databaseModel import connect_to_db, list_all_tables_in_db, get_column_names_and_datatypes_from_engine, get_column_names_datatypes_and_number_type, get_primary_key_from_engine, search_string, get_row_count_from_engine, get_full_table, get_full_table_ordered_by_primary_key, get_unique_values_for_attribute, get_row_number_of_affected_entries, update_to_unify_entries
 
 global engine_1
 global engine_2
@@ -158,41 +158,64 @@ def search_and_replace_entries():
         return None
 
 
-@app.route('/unify-selection', methods = ['POST'])
+@app.route('/unify-selection', methods = ['GET', 'POST'])
 def select_entries_to_unify():
-    db_name = engine_1.url.database
-    table_name = request.form['tablename']
-    column_to_unify = request.form['columntounify']
-    data = convert_result_to_list_of_tuples(get_unique_values_for_attribute(engine_1, table_name, column_to_unify))
-    return render_template('unify-selection.html', db_name = db_name, table_name = table_name, column_to_unify = column_to_unify, data = data, engine_no = 1)
+    if request.method == 'GET':
+        return redirect(url_for('unify_db_entries'), code = 302)
+    elif request.method == 'POST':
+        db_name = engine_1.url.database
+        table_name = request.form['tablename']
+        column_to_unify = request.form['columntounify']
+        data = convert_result_to_list_of_tuples(get_unique_values_for_attribute(engine_1, table_name, column_to_unify))
+        return render_template('unify-selection.html', db_name = db_name, table_name = table_name, column_to_unify = column_to_unify, data = data, engine_no = 1)
 
-@app.route('/unify-preview', methods = ['POST'])
+@app.route('/unify-preview', methods = ['GET', 'POST'])
 def show_affected_entries():
-    print(request)
-    db_name = engine_1.url.database
-    table_name = metadata_table_1.table
-    table_columns = metadata_table_1.columns
-    column_to_unify = request.form['columntounify']
-    new_value = request.form['replacement']
-    index_of_affected_attribute = 0
-    primary_keys = metadata_table_1.primary_keys
-    old_values = list()
-    for key in request.form.keys():
-        if re.match(r'^[0-9]+$', key):
-            old_values.append(request.form[key])
-    print(old_values)
-    data = convert_result_to_list_of_tuples(get_full_table_ordered_by_primary_key(engine_1, table_name, primary_keys))
-    affected_entries = convert_result_to_list_of_tuples(get_row_number_of_affected_entries(engine_1, table_name, column_to_unify, metadata_table_1.primary_keys, old_values))
-    affected_rows = []
-    for row in affected_entries:
-        affected_rows.append(row[0])
-    row_total = metadata_table_1.total_row_count
-    for index, column in enumerate(table_columns):
-        if column == column_to_unify:
-            index_of_affected_attribute = index + 1
-            break
-    
-    return render_template('unify-preview.html', db_name = db_name, table_name = table_name, table_columns = table_columns, column_to_unify = column_to_unify, old_values = old_values, new_value = new_value, data = data, index_of_affected_attribute = index_of_affected_attribute, affected_rows = affected_rows, row_total = row_total)
+    if request.method == 'GET':
+        return redirect(url_for('unify_db_entries'), code = 302)
+    elif request.method == 'POST':
+        print(request)
+        db_name = engine_1.url.database
+        table_name = metadata_table_1.table
+        table_columns = metadata_table_1.columns
+        column_to_unify = request.form['columntounify']
+        print(column_to_unify)
+        new_value = request.form['replacement']
+        old_values = list()
+        for key in request.form.keys():
+            if re.match(r'^[0-9]+$', key):
+                old_values.append(request.form[key])
+        print(old_values)
+        input_is_valid, message = check_validity_of_input(new_value, engine_1, table_name, column_to_unify)
+        if not input_is_valid:
+            data = convert_result_to_list_of_tuples(get_unique_values_for_attribute(engine_1, table_name, column_to_unify))
+            message = message +' Bitte versuchen Sie es erneut.'
+            return render_template('unify-selection.html', db_name = db_name, table_name = table_name, column_to_unify = column_to_unify, data = data, engine_no = 1, message = message)
+        else:
+            try:
+                update_to_unify_entries(engine_1, table_name, column_to_unify, old_values, new_value, False)
+            except Exception as error:
+                message = str(error)
+                if 'constraint' in message.lower():
+                    message = 'Der eingegebene neue Wert verletzt eine Bedingung (Constraint) Ihrer Datenbank. Bitte versuchen Sie es erneut.'
+                data = convert_result_to_list_of_tuples(get_unique_values_for_attribute(engine_1, table_name, column_to_unify))
+                return render_template('unify-selection.html', db_name = db_name, table_name = table_name, column_to_unify = column_to_unify, data = data, engine_no = 1, message = message)
+        
+        index_of_affected_attribute = 0
+        primary_keys = metadata_table_1.primary_keys
+        
+        data = convert_result_to_list_of_tuples(get_full_table_ordered_by_primary_key(engine_1, table_name, primary_keys))
+        affected_entries = convert_result_to_list_of_tuples(get_row_number_of_affected_entries(engine_1, table_name, column_to_unify, metadata_table_1.primary_keys, old_values))
+        affected_rows = []
+        for row in affected_entries:
+            affected_rows.append(row[0])
+        row_total = metadata_table_1.total_row_count
+        for index, column in enumerate(table_columns):
+            if column == column_to_unify:
+                index_of_affected_attribute = index + 1
+                break
+        
+        return render_template('unify-preview.html', db_name = db_name, table_name = table_name, table_columns = table_columns, column_to_unify = column_to_unify, old_values = old_values, new_value = new_value, data = data, index_of_affected_attribute = index_of_affected_attribute, affected_rows = affected_rows, row_total = row_total)
 
 @app.route('/unify', methods = ['GET', 'POST'])
 def unify_db_entries():
@@ -212,18 +235,23 @@ def unify_db_entries():
         new_value = request.form['newvalue']
         message = 'Änderungen erfolgreich durchgeführt.'
         try:
-            update_to_unify_entries(engine_1, table_name, attribute_to_change, old_values, new_value)
+            data = convert_result_to_list_of_tuples(update_to_unify_entries(engine_1, table_name, attribute_to_change, old_values, new_value, True))
         except Exception as error:
             message = str(error)
-        data = convert_result_to_list_of_tuples(get_full_table(engine_1, table_name))
+            data = convert_result_to_list_of_tuples(get_full_table(engine_1, table_name))
     return render_template('unify.html', db_name = db_name, table_columns = table_columns, primary_keys = primary_keys, data = data, table_name = table_name, engine_no = 1, message = message)
 
 @app.route('/disconnect')
 def disconnect_from_single_db():
     global engine_1
     global db_in_use
+    global tables_in_use
+    global metadata_table_1
+
     engine_1 = None
     db_in_use = 0
+    tables_in_use = 0
+    metadata_table_1 = None
     return render_template('singledb.html', username = session['username'])
 
 
@@ -278,6 +306,22 @@ def login_to_db(username, password, host, port, db_name, db_dialect, db_encoding
 def convert_result_to_list_of_tuples(sql_result):
     result_list = [tuple(row) for row in sql_result.all()]
     return result_list  
+
+def check_validity_of_input(input:str, engine, table_name:str, column_name:str):
+    datatypes = get_column_names_datatypes_and_number_type(engine, table_name)
+    is_int_or_float = datatypes[column_name][1]
+    if is_int_or_float == 1 and not re.match(r'^[0-9]+$', input):
+        return False, 'Der eingegebene Wert ist keine ganze Zahl und entspricht daher nicht dem Datentyp des Attributs.'
+    elif is_int_or_float == 2:
+        try:
+            float(input)
+        except ValueError:
+            return False, 'Der eingegebene Wert ist keine Dezimalzahl und entspricht daher nicht dem Datentyp des Attributs.'
+    elif is_int_or_float == 0:
+        char_max_length = datatypes[column_name][2]
+        if len(input) > char_max_length:
+            return False, f'Der eingegebene Text \'{input}\' überschreitet die maximale Länge von {char_max_length} Zeichen.'
+    return True, ''
 
 class TableMetaData:
     def __init__(self, engine, table_name, row_count):

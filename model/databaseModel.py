@@ -20,7 +20,6 @@ def connect_to_db(username:str, password:str, host:str, port:int, db_name:str, d
         print(message)
 
     print(engine_url)
-    # Mit 'utf8' anstelle der Variablen db_encoding hat es funktioniert
     # TODO: Vielleicht zu charset wechseln? https://stackoverflow.com/questions/45279863/how-to-use-charset-and-encoding-in-create-engine-of-sqlalchemy-to-create
     if db_dialect == 'mariadb':
         test_engine = create_engine(engine_url)
@@ -39,7 +38,7 @@ def connect_to_db(username:str, password:str, host:str, port:int, db_name:str, d
         raise DatabaseError('Bitte überprüfen Sie Ihren Benutzernamen, das Passwort und den Datenbanknamen und versuchen es erneut.')
     except operror:
         print('Kein Verbindungsaufbau möglich!')
-        raise DatabaseError('Bitte überprüfen Sie den Servernamen sowie die Portnummer und versuchen es erneut.')
+        raise DatabaseError('Bitte überprüfen Sie den Servernamen, das Passwort sowie die Portnummer und versuchen es erneut.')
     except argerror: 
         raise DatabaseError('Bitte überprüfen Sie Ihre Angaben für den SQL-Dialekt und versuchen es erneut.') 
     except Exception as e:
@@ -60,14 +59,14 @@ def connect_to_db(username:str, password:str, host:str, port:int, db_name:str, d
             print('Keine Verbindung aufgebaut, daher auch kein Schließen nötig.')
     return engine
 
-def get_table_as_dataframe(engine, table_name):
-    table_name = convert_string_if_contains_capitals(table_name)
-    table_df = None
-    primary_keys = get_primary_key_from_engine(engine, table_name)
-    query = text(f'SELECT * FROM {table_name}')
-    with engine.connect() as connection:
-        table_df = read_sql(sql = query, con = connection, index_col = primary_keys)
-    return table_df
+# def get_table_as_dataframe(engine, table_name):
+#     table_name = convert_string_if_contains_capitals(table_name, engine.dialect.name)
+#     table_df = None
+#     primary_keys = get_primary_key_from_engine(engine, table_name)
+#     query = text(f'SELECT * FROM {table_name}')
+#     with engine.connect() as connection:
+#         table_df = read_sql(sql = query, con = connection, index_col = primary_keys)
+#     return table_df
 
 # Ausgabe eines Dictionarys mit allen Tabellen- (Schlüssel) und deren Spaltennamen (als Liste), um sie in der Web-Anwendung anzeigen zu können
 def list_all_tables_in_db(engine):
@@ -82,9 +81,12 @@ def list_all_tables_in_db(engine):
             return None
         for row in result:
             current_table = ''.join(tuple(row))
-            print(current_table)
-            # gleiche Abfrage für MariaDB und PostgreSQL
-            columns_result = connection.execute(text(f"SELECT column_name FROM information_schema.columns where table_name = '{current_table}'"))
+            query = f"SELECT column_name FROM information_schema.columns where table_name = '{current_table}'"
+            if engine.dialect.name == 'postgresql':
+                query = f"{query} AND table_catalog = '{engine.url.database}'"
+            elif engine.dialect.name == 'mariadb':
+                query = f"{query} AND table_schema = DATABASE()"
+            columns_result = connection.execute(text(query))
             column_names = list()
             for column in columns_result:
                 column = ''.join(tuple(column))
@@ -116,11 +118,11 @@ def search_string(engine, table_name:str, cols_and_dtypes:dict, string_to_search
             primary_key = key
         else:
             primary_key = f'{primary_key}, {key}'
-    table_name = convert_string_if_contains_capitals(table_name)
+    table_name = convert_string_if_contains_capitals(table_name, engine.dialect.name)
     string_to_search = escape_string(engine.dialect.name, string_to_search)
     sql_condition = 'WHERE'
     for key in cols_and_dtypes.keys():
-        attribute_to_search = convert_string_if_contains_capitals(key).strip()
+        attribute_to_search = convert_string_if_contains_capitals(key, engine.dialect.name).strip()
         if is_number(cols_and_dtypes[key], engine.dialect.name):
            attribute_to_search = f'CAST ({attribute_to_search} AS CHAR)'
         if sql_condition == 'WHERE':
@@ -145,8 +147,8 @@ def search_string(engine, table_name:str, cols_and_dtypes:dict, string_to_search
 
 # alle Vorkommen eines Teilstrings in einer Spalte ersetzen
 def replace_string_everywhere(engine, table_name, column_name:str, string_to_replace:str, replacement_string:str):
-    table_name = convert_string_if_contains_capitals(table_name)
-    column_name = convert_string_if_contains_capitals(column_name)
+    table_name = convert_string_if_contains_capitals(table_name, engine.dialect.name)
+    column_name = convert_string_if_contains_capitals(column_name, engine.dialect.name)
     string_to_replace = escape_string(engine.dialect.name, string_to_replace)
     replacement_string = escape_string(engine.dialect.name, replacement_string)
     query = ''
@@ -167,8 +169,8 @@ def replace_string_everywhere(engine, table_name, column_name:str, string_to_rep
         connection.close()
 
 def replace_one_string(engine, table_name:str, column_name:str, string_to_replace:str, replacement_string:str, primary_keys_and_values:dict):
-    table_name = convert_string_if_contains_capitals(table_name)
-    column_name = convert_string_if_contains_capitals(column_name)
+    table_name = convert_string_if_contains_capitals(table_name, engine.dialect.name)
+    column_name = convert_string_if_contains_capitals(column_name, engine.dialect.name)
     if type(string_to_replace) == str:
         string_to_replace = escape_string(engine.dialect.name, string_to_replace)
     if type(replacement_string) == str:
@@ -215,8 +217,8 @@ def replace_one_string(engine, table_name:str, column_name:str, string_to_replac
 
 
 
-def update_to_unify_entries(engine, table_name:str, attribute_to_change:str, old_values:list, new_value:str):
-    query = f'UPDATE {convert_string_if_contains_capitals(table_name)} SET {convert_string_if_contains_capitals(attribute_to_change)} = :new_value'
+def update_to_unify_entries(engine, table_name:str, attribute_to_change:str, old_values:list, new_value:str, commit:bool):
+    query = f'UPDATE {convert_string_if_contains_capitals(table_name, engine.dialect.name)} SET {convert_string_if_contains_capitals(attribute_to_change, engine.dialect.name)} = :new_value'
     cols_and_dtypes = get_column_names_and_datatypes_from_engine(engine, table_name)
     dtype_is_int_or_float = datatype_is_int_or_float(engine, cols_and_dtypes)
     condition_dict = {}
@@ -237,9 +239,9 @@ def update_to_unify_entries(engine, table_name:str, attribute_to_change:str, old
     condition = 'WHERE'
     for index, value in enumerate(old_values):
         if index == 0:
-            condition = f'{condition} {convert_string_if_contains_capitals(attribute_to_change)} = :value_{str(index)}'
+            condition = f'{condition} {convert_string_if_contains_capitals(attribute_to_change, engine.dialect.name)} = :value_{str(index)}'
         else:
-            condition = f'{condition} OR {convert_string_if_contains_capitals(attribute_to_change)} = :value_{str(index)}'
+            condition = f'{condition} OR {convert_string_if_contains_capitals(attribute_to_change, engine.dialect.name)} = :value_{str(index)}'
         condition_dict['value_' + str(index)] = value
     query = text(f'{query} {condition}')
     params = [new_value] + old_values
@@ -248,25 +250,9 @@ def update_to_unify_entries(engine, table_name:str, attribute_to_change:str, old
         query.bindparams(bindparam(key))
     with engine.connect() as connection:
         result = connection.execute(query, condition_dict)
-        connection.commit()
+        if commit:
+            connection.commit()
     return result
-
-
-# def datatype_is_int_or_float(engine, cols_and_dtypes:dict):
-#     # Liste mit Hinweisen, ob beim Einfügen in die Datenbank Datentypumwandlungen nötig sind, weil alle Daten vom Client Strings sind
-#     # 2 für Kommazahlen, 1 für ganze Zahlen, 0 für nicht numerische Datentypen
-#     dtype_is_int_or_float = []
-#     for key in cols_and_dtypes.keys():
-#         item = cols_and_dtypes[key]
-#         print(item)
-#         if is_number(item, engine.dialect.name):
-#             if is_decimal_number(item):
-#                 dtype_is_int_or_float.append(2)
-#             else: 
-#                 dtype_is_int_or_float.append(1)
-#         else:
-#             dtype_is_int_or_float.append(0)
-#     return dtype_is_int_or_float
 
 def datatype_is_int_or_float(engine, cols_and_dtypes:dict):
     dtype_is_int_or_float = {}
@@ -281,7 +267,7 @@ def datatype_is_int_or_float(engine, cols_and_dtypes:dict):
             dtype_is_int_or_float[key] = [item, 0]
     return dtype_is_int_or_float
 
-def  get_row_number_of_affected_entries(engine, table_name, affected_attribute, primary_keys:list, old_values):
+def  get_row_number_of_affected_entries(engine, table_name:str, affected_attribute:str, primary_keys:list, old_values:list):
     key_for_ordering = primary_keys[0]
     condition = 'WHERE'
     condition_dict = {}
@@ -297,25 +283,17 @@ def  get_row_number_of_affected_entries(engine, table_name, affected_attribute, 
             condition_dict['value_' + str(index)] = float(value)
 
         if index == 0:
-            condition = f"{condition} sub.{convert_string_if_contains_capitals(affected_attribute)} = :{'value_' + str(index)}"
+            condition = f"{condition} sub.{convert_string_if_contains_capitals(affected_attribute, engine.dialect.name)} = :{'value_' + str(index)}"
         else:
-            condition = f"{condition} OR sub.{convert_string_if_contains_capitals(affected_attribute)} = :{'value_' + str(index)}"
-    
-    # for index, value in enumerate(old_values):
-    #     print(dtype_is_int_or_float[0])
-    #     print('value: ', value, type(value), dtype_is_int_or_float[index])
-    #     if dtype_is_int_or_float[index] == 0:
-    #         condition_dict['value_' + str(index)] = value
-    #     elif dtype_is_int_or_float[index] == 1:
-    #         condition_dict['value_' + str(index)] = int(value)
-    #     elif dtype_is_int_or_float[index] == 2:
-    #         condition_dict['value_' + str(index)] = float(value)
-
-    #     if index == 0:
-    #         condition = f"{condition} sub.{convert_string_if_contains_capitals(affected_attribute)} = :{'value_' + str(index)}"
-    #     else:
-    #         condition = f"{condition} OR sub.{convert_string_if_contains_capitals(affected_attribute)} = :{'value_' + str(index)}"
-    query = text(f"SELECT * FROM (SELECT ROW_NUMBER() OVER (ORDER BY {key_for_ordering}) AS Nr, * FROM {table_name}) sub {condition}")
+            condition = f"{condition} OR sub.{convert_string_if_contains_capitals(affected_attribute, engine.dialect.name)} = :{'value_' + str(index)}"
+    columns_to_select = '*'
+    if engine.dialect.name == 'mariadb':
+        for key in cols_and_dtypes.keys():
+            if columns_to_select == '*':
+                columns_to_select = key
+            else:
+                columns_to_select = f'{columns_to_select}, {key}'
+    query = text(f"SELECT * FROM (SELECT ROW_NUMBER() OVER (ORDER BY {key_for_ordering}) AS Nr, {columns_to_select} FROM {table_name}) sub {condition}")
     print(query)
     for key in condition_dict.keys():
         query.bindparams(bindparam(key))
@@ -345,6 +323,35 @@ def get_column_names_and_datatypes_from_engine(engine, table_name):
         names_and_data_types[row[0]] = row[1]
     return names_and_data_types
 
+def get_column_names_datatypes_and_number_type(engine, table_name):
+    query = ''
+    if engine.dialect.name == 'postgresql':
+        query = text(f"SELECT column_name, data_type, character_maximum_length FROM information_schema.columns WHERE table_name = '{table_name}' AND table_catalog = '{engine.url.database}'")
+    elif engine.dialect.name == 'mariadb':
+        query = text(f"SELECT COLUMN_NAME AS column_name, DATA_TYPE AS data_type, CHARACTER_MAXIMUM_LENGTH AS character_maximum_length FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{table_name}'")
+    else:
+        print('Nicht implementiert.')
+        return None
+    with engine.connect() as connection:
+        result = connection.execute(query)
+    names_and_data_types = dict()
+    for row in result:
+        print('Zeile: ', row)
+        number_type = int()
+        if is_number(row[1], engine.dialect.name):
+            if is_decimal_number(row[1]):
+                number_type = 2
+            else:
+                number_type = 1            
+        else: 
+            number_type = 0
+        # nur für Textattribute vorhanden, None bei Zahlen
+        char_max_length = row[2]
+        names_and_data_types[row[0]] = [row[1], number_type, char_max_length]
+    return names_and_data_types
+
+
+
 def get_table_creation_information_from_engine(engine, table_name):
     query = f"SELECT ordinal_position, column_name, data_type, character_maximum_length, is_nullable, column_default FROM information_schema.columns WHERE table_name = '{table_name}'"
     if engine.dialect.name == 'postgresql':
@@ -368,7 +375,7 @@ def get_table_creation_information_from_engine(engine, table_name):
 
 
 def get_primary_key_from_engine(engine, table_name:str):
-    table_name = convert_string_if_contains_capitals(table_name)
+    table_name = convert_string_if_contains_capitals(table_name, engine.dialect.name)
     with engine.connect() as connection:
         if engine.dialect.name == 'postgresql':
             primary_key_cursor = connection.execute(text(f"SELECT a.attname as column_name FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) WHERE i.indrelid = '{table_name}'::regclass AND i.indisprimary"))
@@ -400,16 +407,16 @@ def get_row_count_from_engine(engine, table_name:str):
         return res.fetchone()[0] 
 
 def build_update_query(table_name:str, column_names_of_affected_attributes:tuple, column_names_of_condition:tuple, values:tuple, operator:str):
-    table_name = convert_string_if_contains_capitals(table_name)
+    table_name = convert_string_if_contains_capitals(table_name, engine.dialect.name)
     if len(column_names_of_affected_attributes) + len(column_names_of_condition) != len(values):
         raise QueryError('Anzahl der Spaltennamen und Anzahl der Werte stimmen nicht überein.')
     query = f'UPDATE {table_name} SET'
     columns = ''
     for index, title in enumerate(column_names_of_affected_attributes):
         if len(column_names_of_affected_attributes) > 1 and index > 0:
-            columns = f'{columns},  {convert_string_if_contains_capitals(title)} = :{title}'
+            columns = f'{columns},  {convert_string_if_contains_capitals(title, engine.dialect.name)} = :{title}'
         else:
-            columns = f'{columns}{convert_string_if_contains_capitals(title)} = :{title}'
+            columns = f'{columns}{convert_string_if_contains_capitals(title, engine.dialect.name)} = :{title}'
     condition = build_sql_condition(column_names_of_condition, operator)
     query = text(f'{query} {columns} {condition}')
     print(query)
@@ -432,7 +439,7 @@ def build_sql_condition(column_names:tuple, operator:str = None):
         for index, item in enumerate(column_names):
             if len(column_names) > 1 and index > 0:
                 condition = f'{condition} {operator.upper()}'
-            condition = f'{condition} {convert_string_if_contains_capitals(item)} = :{item}'
+            condition = f'{condition} {convert_string_if_contains_capitals(item, engine.dialect.name)} = :{item}'
         return condition
 
 def check_database_encoding(engine):
@@ -464,11 +471,10 @@ def is_decimal_number(data_type:str):
 
     
 # setzt String in doppelte Anführungszeichen, wenn darin Großbuchstaben enthalten sind (nötig für Tabellen- und Spaltennamen in PostgreSQL)
-def convert_string_if_contains_capitals(string:str):
-    if any([x.isupper() for x in string]):
+def convert_string_if_contains_capitals(string:str, db_dialect:str):
+    if db_dialect == 'postgresql' and any([x.isupper() for x in string]):
         string = f'"{string}"'
-    else:
-        return string
+    return string
     
 def escape_string(db_dialect:str, string):
     if db_dialect == 'postgresql':
@@ -478,75 +484,9 @@ def escape_string(db_dialect:str, string):
     return string
 
 if __name__ == '__main__':
-    engine = None
-    try:
-        engine = connect_to_db('postgres', 'arc-en-ciel', 'localhost', 5432, 'Test', 'postgresql', 'utf8')
-    except DatabaseError as error:
-        print(error)
-    result = search_string(engine, 'studierende', 'vorname', 'n')
-    for item in result[0]:
-        print(item)
-    print('Primärschlüssel: ' + result[1])
-    # with engine.connect() as conn:
-    #     table_name = 'studierende'
-    #     pmk = 'matrikelnummer'
-    #     attr1 = 'vorname'
-    #     attr2 = 'nachname'
-    #     query = text(f'INSERT INTO {table_name} ({pmk}, {attr1}, {attr2}) VALUES (:mnr, :vnm, :nnm)')
-    #     query = query.bindparams(mnr = 1025463, vnm = 'Scherzkeks', nnm = "Oreilly")
-    #     conn.execute(query)
-    #     conn.commit()
-    
-    # bindparam-Test
-    # columns = ('vorname', 'nachname')
-    # values = ('Helmut', 'Dittmann')
-    # query = build_update_query('studierende', columns, values, f"WHERE vorname = 'Antonio'")
-    # bkub = dict(zip(columns, values))
-    # print(bkub)
-    # for key in bkub.keys():
-    #     query.bindparams(bindparam(key))
-    # print(query)
-    # with engine.connect() as conn:
-    #     conn.execute(query, bkub)
-    #     conn.commit()
-    with engine.connect() as conn:
-        replace_string_everywhere(engine, 'studierende', 'vorname', 'Gus', 'GAS')
-    
-    maria_engine = connect_to_db('root', 'arc-en-ciel', 'localhost', 3306, 'test2', 'mariadb', 'latin1')
-    print(check_database_encoding(maria_engine))
-    pdf = get_table_as_dataframe(engine = maria_engine, table_name = 'studierende')
-    print('Datentypen: ', pdf.dtypes)
-    print(pdf.index.dtype)
-    print('Info: ', pdf.info)
-    print('Header :', pdf.head)
-
-    get_primary_key_from_engine(maria_engine, 'bla')
-    result = search_string(maria_engine, 'bla', 'vorname', 'nn')
-    for item in result[0]:
-        print(item)
-    # replace_string(engine, 'studierende', 'vorname', 'o', 'O', 'matrikelnummer', (2331845, 2516987))
-    # try:
-    #     print(list_all_tables_in_db(engine))
-    # except Exception as error:
-    #     print(error)
-    print(engine.url.database)
-
-    query, values = build_update_query('bla', ('vorname',), ('matrikelnummer',), ('Antonetta', 9810223), 'OR')
-    with maria_engine.connect() as conn:
-        conn.execute(query, values)
-        conn.commit()
-    result = search_string(engine, 'studierende', 'matrikelnummer', 3)
-    for line in result:
-        print(line)
-    anton = '\\Anton'
-    print(anton)
-    print(escape_string('mariadb', anton))
-
-    list_all_tables_in_db(engine)
-    get_table_creation_information_from_engine(engine, 'studierende')
-        
-
-
-# Durchführung von Datenbankabfragen (SELECT), Ausgabe des Ergebnisses 
-
-# Ausführung von Änderungen an der Datenbank (UPDATE, DELETE), Ausgabe des Ergebnisses
+    engine = connect_to_db('postgres', 'arc-en-ciel', 'localhost', 5432, 'Test', 'postgresql', 'utf8')
+    res = get_row_number_of_affected_entries(engine, 'punkte', 'punktzahl', ['matrikelnummer'], [20])
+    for row in res:
+        print(row)
+    print('int' in 'integer')
+    print(len('hello'))
