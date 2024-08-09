@@ -4,13 +4,20 @@
 <head>
     <title>SQL-Datenbanken: Vorschau</title>
     {% include 'css.html' %}
+    <script type="text/javascript">
+        function confirmBack() {
+            var result = confirm('Sind Sie sicher, dass Sie den Vorgang abbrechen wollen?');
+            if (result) {
+                window.history.back();
+            }
+        }
+    </script>
 
 </head>
 
 <body>
-    <input type="hidden" id="database_name" value="{{ db_name }}">
 
-    <div class="unify">
+    <div class="replace">
         <div class="connection">
             <h3>Verbunden mit Datenbank {{ db_name }}, Tabelle {{ table_name }} </h3>
             <a href="{{ url_for('disconnect_from_single_db') }}"><button
@@ -23,46 +30,114 @@
             <a href="{{ url_for('search_and_replace_entries') }}" class="active">Suchen und Ersetzen</a>
             <a href="{{ url_for('unify_db_entries') }}">Vereinheitlichen</a>
         </div>
-        <form id="replaceparams" action="{{ '/replace' }}" method="POST">
-            <label for="columntosearch">Spalte auswählen:</label>
-            <select name="columntosearch" id="columntosearch" required>
-                <option value="all">Alle Spalten</option>
-                {% for column in table_columns %}
-                <option value="{{ column }}">{{ column }}</option>
-                {% endfor %}
-            </select>
-            <label for="searchstring">Suchen</label>
-            <input type="text" id="searchstring" name="searchstring">
-            <label for="replacement">Ersetzen durch</label>
-            <input type="text" id="replacement" name="replacement">
-            <input type="hidden" id="engine" name="engine" value="{{ engine_no }}">
-            <input type="hidden" id="table" name="table" value="{{ table_name }}">
-            <input type="submit" id="preview" value="Vorschau">
+        <h4>Bitte wählen Sie aus, welche Vorkommen von '{{ string_to_replace}}' durch '{{ replacement_string }}' ersetzt
+            werden sollen:</h4>
+        <form action="{{ '/replace' }}" method="POST">
+            <input type="checkbox" id="all" onclick="toggle(this);" value="all" checked>
+            <label for="all">Alle auswählen</label>
+            <div id="table">
+                <table id="preview">
+                    <thead>
+                        <tr>
+                            {% for column in table_columns %}
+                            <th>{{ column }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% set occurrence_count = [] %}
+                        {% for row in replacement_data_dict.values() %}
+                        <tr>
+                            {% set attribute_count = [] %}
+                            {% for index in row['positions'] %}
+                            {% if index == 1 %}
+                            {% set __ = occurrence_count.append(1) %}
+                            <td>
+                                <input type="checkbox" name="selection" checked onclick="switchData(this, this);"
+                                    data-old="{{ row['old'][attribute_count | length] }}"
+                                    data-new="{{ row['new'][attribute_count | length] }}"
+                                    id="{{ occurrence_count | length }}" value="{{ occurrence_count | length }}">
+                                <label for="{{ occurrence_count | length }}"
+                                    id="{{ 'label' + (occurrence_count | length | string) }}"> <span
+                                        style="color: green;">{{
+                                        row['new'][attribute_count | length] }}
+                                    </span></label>
+                            </td>
+                            {% else %}
+                            <td>{{ row['old'][attribute_count | length] }}</td>
+                            {% endif %}
+                            {% set __ = attribute_count.append(1) %}
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
 
+            </div>
+            <span class="counter">{{ occurrence_count | length }} </span> von {{ occurrence_count | length }}
+            betroffenen Einträgen werden verändert.
+            <button onclick="confirmBack()">Abbrechen</button>
+            <input type="submit" value="Änderungen durchführen">
+            <input type="hidden" name="string-to-replace" value="{{ string_to_replace }}">
+            <input type="hidden" name="replacement-string" value="{{ replacement_string }}">
+            <input type="hidden" name="affected-attributes" value="{{ affected_attributes }}">
         </form>
+        <div class="msg">{{ message }}</div>
 
-        <table id="preview">
-            <thead>
-                <tr>
-                    <th><input type="checkbox" /></th>
-                    {% for column in table_columns %}
-                    <th>{{ column }}</th>
-                    {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in data %}
-                <tr>
-                    <td><input type="checkbox" value="{{ row }}"></td>
-                    {% for item in row %}
-                    <td>{{ item }}</td>
-                    {% endfor %}
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
 
     </div>
+    <script>
+
+        function switchData(affectedCheckbox, caller) {
+            const labelId = 'label' + affectedCheckbox.value;
+            let labelElement = document.getElementById(labelId);
+            var boxToCheckAll = document.getElementById('all');
+            if (affectedCheckbox.checked == true) {
+                labelElement.innerText = affectedCheckbox.dataset.new;
+                labelElement.style.color = "green";
+            } else {
+                labelElement.innerText = affectedCheckbox.dataset.old;
+                labelElement.style.color = "black";
+                boxToCheckAll.checked = false;
+            }
+
+            if (caller == affectedCheckbox) {
+                var allBoxes = document.querySelectorAll('input[type="checkbox"]');
+                var counter = 0;
+                for (var i = 0; i < allBoxes.length; i++) {
+                    if (allBoxes[i] != boxToCheckAll && allBoxes[i].checked == true) {
+                        counter++;
+                    }
+                }
+                if (counter == allBoxes.length - 1) {
+                    boxToCheckAll.checked = true;
+                }
+                let selectedEntries = document.querySelector('.counter');
+                selectedEntries.innerHTML = counter;
+            }
+
+        }
+        // Quelle: https://stackoverflow.com/questions/386281/how-to-implement-a-select-all-checkbox-in-html (ohne switchData)
+        function toggle(source) {
+            var checkboxes = document.querySelectorAll('input[type="checkbox"]');
+            var counter = 0;
+            for (var i = 0; i < checkboxes.length; i++) {
+                if (checkboxes[i] != source) {
+                    checkboxes[i].checked = source.checked;
+                    switchData(checkboxes[i], source);
+                }
+            }
+            let selectedEntries = document.querySelector('.counter');
+            if (source.checked == false) {
+                selectedEntries.innerHTML = 0;
+            } else {
+                selectedEntries.innerHTML = checkboxes.length - 1;
+            }
+        }
+
+
+
+    </script>
 </body>
 
 </html>

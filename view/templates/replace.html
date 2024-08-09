@@ -23,7 +23,7 @@
             <a href="{{ url_for('search_and_replace_entries') }}" class="active">Suchen und Ersetzen</a>
             <a href="{{ url_for('unify_db_entries') }}">Vereinheitlichen</a>
         </div>
-        <form id="replaceparams" action="{{ '/replace' }}" method="POST">
+        <form id="replaceparams" action="{{ '/replace-preview' }}" method="POST">
             <label for="columntosearch">Spalte auswählen:</label>
             <select name="columntosearch" id="columntosearch" required>
                 <option value="all">Alle Spalten</option>
@@ -31,22 +31,25 @@
                 <option value="{{ column }}">{{ column }}</option>
                 {% endfor %}
             </select>
-            <label for="searchstring">Suchen</label>
-            <input type="text" id="searchstring" name="searchstring">
-            <label for="replacement">Ersetzen durch</label>
+            <label for="searchstring">Suchen:</label>
+            <input type="text" id="searchstring" name="searchstring" minlength="2">
+            <label for="replacement">Ersetzen durch:</label>
             <input type="text" id="replacement" name="replacement">
             <input type="hidden" id="engineno" name="engineno" value="{{ engine_no }}">
             <input type="hidden" id="tablename" name="tablename" value="{{ table_name }}">
-            <input type="submit" id="preview" value="Vorschau">
+            <input type="submit" id="preview" onclick="return isEmpty();" value="Vorschau">
 
         </form>
         <div id="table"></div>
         <div data-list='{{ table_columns | tojson | safe }}' id="list-container"></div>
 
+        <div class="msg">{{ message }}</div>
+
     </div>
     {% include 'grid.html' %}
+
     <script>
-        const send = document.querySelector("#preview");
+        /* const send = document.querySelector("#preview");
 
         send.addEventListener("click", async () => {
             const replaceInfo = document.querySelector("#replaceparams");
@@ -57,7 +60,17 @@
                 body: formData,
             });
             console.log(await response.json());
-        });
+        }); */
+
+        function isEmpty() {
+            if (document.forms['replaceparams'].replacement.value === "") {
+                return confirm("Sind Sie sicher, dass Sie den gesuchten Wert löschen wollen?");
+            } else if (document.forms['replaceparams'].replacement.value === document.forms['replaceparams'].searchstring.value) {
+                alert("Der zu ersetzende und der neue Wert sind gleich. Daher werden keine Änderungen vorgenommen.")
+                return false
+            }
+            return true;
+        }
 
     </script>
 </body>

@@ -69,7 +69,7 @@
             <input type="hidden" id="oldvalues" name="oldvalues" value="{{ old_values }}">
             <input type="hidden" id="newvalue" name="newvalue" value="{{ new_value }}">
             {{ affected_rows | length }} von {{ row_total }} Einträgen werden verändert.
-            <button onclick="confirmBack()">Zurück</button>
+            <button onclick="confirmBack()">Abbrechen</button>
             <input type="submit" value="Änderungen durchführen">
         </form>
     </div>
