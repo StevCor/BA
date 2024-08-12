@@ -1,14 +1,10 @@
 <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
 <script>
-    var container = document.querySelector('#list-container');
-    var js_array = JSON.parse(container.getAttribute('data-list'));
+    var columnList = {{ table_columns | tojson | safe }};
     var data = {{ data | tojson | safe }}
     new gridjs.Grid({
-        columns: js_array,
+        columns: columnList,
         data: data,
-        /* search: {
-            selector: (cell, rowIndex, cellIndex) => [0, 1, 4].includes(cellIndex) ? cell : null,
-        },*/
         search: false,
         sort: true,
         pagination: true,

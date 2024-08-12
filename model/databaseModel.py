@@ -92,6 +92,29 @@ def list_all_tables_in_db(engine:Engine):
     print(table_names)
     return table_names
 
+def list_all_tables_in_db_with_preview(engine:Engine):
+    table_names_and_columns = {}
+    table_previews = {}
+    query = ''
+    if engine.dialect.name == 'postgresql':
+        query = text("SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname != 'pg_catalog' AND schemaname != 'information_schema'")
+    elif engine.dialect.name == 'mariadb':
+        query = text("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_TYPE LIKE 'BASE_TABLE' AND TABLE_SCHEMA = DATABASE()")
+    else:
+        return None
+    result = execute_sql_query(engine, query)
+    for row in result:
+        current_table = ''.join(tuple(row))
+        query = f'SELECT * FROM {current_table} LIMIT 20'
+        preview_result = execute_sql_query(engine, text(query))
+        column_names = list(preview_result.keys())
+        preview_list = convert_result_to_list_of_lists(preview_result)
+        table_names_and_columns[current_table] = column_names
+        table_previews[current_table] = preview_list
+    print(table_names_and_columns, table_previews)
+    return table_names_and_columns, table_previews
+
+
 def get_full_table(engine:Engine, table_name:str):
     query = text(f'SELECT * FROM {table_name}')
     return convert_result_to_list_of_lists(execute_sql_query(engine, query))   
@@ -564,26 +587,7 @@ def get_column_names_data_types_and_max_length(engine:Engine, table_name:str):
     return column_names_and_data_types
 
 
-def get_table_creation_information_from_engine(engine:Engine, table_name:str):
-    query = f"SELECT ordinal_position, column_name, data_type, character_maximum_length, is_nullable, column_default FROM information_schema.columns WHERE table_name = '{table_name}'"
-    if engine.dialect.name == 'postgresql':
-        query = text(f"{query} AND table_catalog = '{engine.url.database}' ORDER BY ordinal_position")
-    elif engine.dialect.name == 'mariadb':
-        query = text(f"{query} AND table_schema = DATABASE() ORDER BY ordinal_position")
-    else:
-        print('Nicht implementiert.')
-        return None
-    with engine.connect() as connection:
-        result = connection.execute(query)
-    column_information = dict()
-    for row in result:
-        is_nullable = False
-        if row[4] == 'YES':
-            is_nullable = True
-        column_information[row[1]] = {'data_type': row[2], 'max_length': row[3], 'nullable': is_nullable, 'default': row[5]}
-    primary_key = get_primary_key_from_engine(engine, table_name)
-    print(column_information, primary_key)
-    return column_information, primary_key
+
 
 
 def get_primary_key_from_engine(engine:Engine, table_name:str):

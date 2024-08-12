@@ -4,7 +4,7 @@ import re
 from waitress import serve
 from model.SQLDatabaseError import DatabaseError
 from model.loginModel import register_new_user, login_user 
-from model.databaseModel import connect_to_db, list_all_tables_in_db, get_column_names_data_types_and_max_length, get_primary_key_from_engine, search_string, get_row_count_from_engine, get_full_table, get_full_table_ordered_by_primary_key, get_unique_values_for_attribute, get_replacement_information, get_row_number_of_affected_entries, check_data_type_and_constraint_compatibility, replace_all_string_occurrences, replace_some_string_occurrences, update_to_unify_entries
+from model.databaseModel import connect_to_db, get_column_names_data_types_and_max_length, get_primary_key_from_engine, list_all_tables_in_db_with_preview, search_string, get_row_count_from_engine, get_full_table, get_full_table_ordered_by_primary_key, get_unique_values_for_attribute, get_replacement_information, get_row_number_of_affected_entries, check_data_type_and_constraint_compatibility, replace_all_string_occurrences, replace_some_string_occurrences, update_to_unify_entries
 
 global engine_1
 global engine_2
@@ -30,7 +30,7 @@ def start():
     if not session.get('logged_in'):
         return render_template('login.html', message = 'Bitte loggen Sie sich ein, um fortzufahren.')
     else:
-        return login_to_one_db()
+        return redirect(url_for('login_to_one_db', engine_no = 1))
     
 
 @app.route('/login', methods=['POST', 'GET'])
@@ -42,7 +42,7 @@ def check_login():
         if result[0] == True:
             session['logged_in'] = True
             session['username'] = request.form['username']
-            return redirect(url_for('login_to_one_db'))
+            return redirect(url_for('set_up_db_connection', engine_no = 1))
         else:
             message = result[1]
     return render_template('login.html', message = message)
@@ -54,6 +54,62 @@ def register():
     if request.method == 'POST':
         message = register_new_user(request.form['username'], request.form['password'])
     return render_template('register.html', message = message)
+
+@app.route('/connect-to-db<int:engine_no>', methods = ['GET', 'POST'])
+def set_up_db_connection(engine_no):
+    if not session.get('logged_in'):
+        return redirect(url_for('start'))
+    else:
+        if request.method == 'GET':
+            return render_template('db-connect.html', username = session['username'], engine_no = engine_no)
+        elif request.method == 'POST':
+            if 'db-one' in request.form.keys():
+                db_name = request.form['db-name1']
+                db_dialect = request.form['db-dialect1']
+                username = request.form['user-name1']
+                password = request.form['password1']
+                host = request.form['host-name1']
+                port = request.form['port-number1']
+                db_encoding = request.form['encoding1']
+            elif 'db-two' in request.form.keys():
+                db_name = request.form['db-name2']
+                db_dialect = request.form['db-dialect2']
+                username = request.form['user-name2']
+                password = request.form['password2']
+                host = request.form['host-name2']
+                port = request.form['port-number2']
+                db_encoding = request.form['encoding2']
+            engine_no = int(request.form['engine-no'])
+            login_result = login_to_db(username, password, host, port, db_name, db_dialect, db_encoding)
+            if not login_result == 0:
+                message = ''
+                if login_result == 1:
+                    message = 'Sie haben sich bereits mit zwei Datenbanken verbunden.'
+                elif login_result == 2:
+                    message = 'Beim Aufbau der Datenbankverbindung ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.'
+                return render_template('db-connect.html', username = session['username'], engine_no = engine_no, message = message)
+            else:
+                engine_no = 0
+                if 'db-one' in request.form.keys():
+                    engine_no = 1
+                elif 'db-two' in request.form.keys():
+                    engine_no = 2
+                return redirect(url_for('select_tables_for_engine', eng = engine_no))
+            
+@app.route('/tables/<int:eng>', methods = ['GET'])
+def select_tables_for_engine(eng:int):
+    if not eng == 1 or eng == 2:
+        return None
+    if eng == 1:
+        engine = engine_1
+    elif eng == 2:
+        engine = engine_2
+    tables, previews = list_all_tables_in_db_with_preview(engine)
+    db_name = engine.url.database
+    message = f'Verbindung zur Datenbank {db_name} aufgebaut.'
+    return render_template('tables.html', engine_no = eng, db_name = db_name, tables = tables, previews = previews, message = message)
+
+        
 
 @app.route('/singledb', methods = ['POST', 'GET'])
 def login_to_one_db():
@@ -69,21 +125,24 @@ def login_to_one_db():
             port = request.form['portnumber']
             db_encoding = request.form['encoding']
             login_result = login_to_db(username, password, host, port, db_name, db_dialect, db_encoding)
-            message = login_result[0]
-            status = login_result[1]
-            if not status == 0:
+            message = ''
+            if not login_result == 0:
+                if login_result == 1:
+                    message = 'Sie haben sich bereits mit zwei Datenbanken verbunden.'
+                elif login_result == 2:
+                    message = 'Beim Aufbau der Datenbankverbindung ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.'
                 return render_template('singledb.html', username = session['username'], message = message)
             else:
                 if 'onedb' in request.form.keys():
                     tables = dict()
                     engine_no = 0
                     if db_in_use == 1:
-                        tables = list_all_tables_in_db(engine_1)
+                        tables, previews = list_all_tables_in_db_with_preview(engine_1)
                         engine_no = 1
                     elif db_in_use == 2:
-                        tables = list_all_tables_in_db(engine_2)
+                        tables, previews = list_all_tables_in_db_with_preview(engine_2)
                         engine_no = 2
-                    return render_template('tables.html', engine_no = engine_no, db_name = db_name, tables = tables, message = message)
+                    return render_template('tables.html', engine_no = engine_no, db_name = db_name, tables = tables, previews = previews, message = message)
                 elif 'twodbs' in request.form.keys():
                     return render_template('tables.html')
         elif request.method == 'GET':
@@ -115,8 +174,8 @@ def select_tables():
             metadata_table_2 = TableMetaData(engine, table_name, count)
             columns = metadata_table_2.columns
         else:
-            tables = list_all_tables_in_db(engine)
-            return render_template('tables.html', engine_no = engine_no, db_name = engine.url.database, tables = tables, message = 'Sie haben bereits zwei Tabellen ausgewählt.')
+            tables, previews = list_all_tables_in_db_with_preview(engine)
+            return render_template('tables.html', engine_no = engine_no, db_name = engine.url.database, tables = tables, previews = previews, message = 'Sie haben bereits zwei Tabellen ausgewählt.')
         data = get_full_table(engine, table_name)
         return render_template('onetable.html', table_name = table_name, table_columns = columns, data = data)
     else:
@@ -447,21 +506,24 @@ def disconnect_from_single_db():
 def login_to_two_dbs():
     return None
     
-@app.route('/logout')
+@app.route('/logout', methods = ['GET', 'POST'])
 def logout():
-    # Daten der Session entfernen, um den Nutzer auszuloggen
-    session.pop('loggedin', None)
-    session.pop('username', None)
-    # Engines zurücksetzen
-    global engine_1
-    global engine_2
-    global db_in_use
-    engine_1 = None
-    engine_2 = None
-    db_in_use = 0
-    # Weiterleitung zur Login-Seite
-    return render_template('login.html', 
-                           message = 'Sie wurden erfolgreich abgemeldet. \nBitte loggen Sie sich wieder ein, um das Tool zu nutzen.')
+    if request.method == 'GET':
+        return redirect(url_for('start'))
+    elif request.method == 'POST':
+        # Daten der Session entfernen, um den Nutzer auszuloggen
+        session.pop('loggedin', None)
+        session.pop('username', None)
+        # Engines zurücksetzen
+        global engine_1
+        global engine_2
+        global db_in_use
+        engine_1 = None
+        engine_2 = None
+        db_in_use = 0
+        # Weiterleitung zur Login-Seite
+        return render_template('login.html', 
+                            message = 'Sie wurden erfolgreich abgemeldet. \nBitte loggen Sie sich wieder ein, um das Tool zu nutzen.')
 
 
     
@@ -469,27 +531,22 @@ def login_to_db(username, password, host, port, db_name, db_dialect, db_encoding
     global engine_1
     global engine_2
     global db_in_use
-    message = ''
     status = 0
     if engine_1 and engine_2:
-        message = 'Sie haben sich bereits mit zwei Datenbanken verbunden.'
         status = 1
     else:
         try: 
             db_engine = connect_to_db(username, password, host, port, db_name, db_dialect, db_encoding)
         except DatabaseError as error:
-            status = 1
-            message = str(error)
+            status = 2
         else:
             if not engine_1:
                 engine_1 = db_engine
-                message = f'Verbindung zur Datenbank {db_name} aufgebaut.'
                 db_in_use += 1
             elif engine_1 and not engine_2:
                 engine_2 = db_engine
                 db_in_use += 2
-                message = f'Verbindung zur Datenbank {db_name} aufgebaut.'
-    return message, status
+    return status
 
 # gibt eine ganze Zahl aus, je nach Status der Überprüfung
 # 0: Prüfung erfolgreich, Daten können eingefügt werden

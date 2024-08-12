@@ -3,7 +3,10 @@
 
 <head>
     <title>SQL-Datenbanken</title>
-    {% include 'css.html' %}
+    <meta charset="utf-8">
+    <!-- <meta name="viewport" content="width=device-width, initial-scale=1"> -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/tables.css') }}">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.1/css/all.css">
     <script type="text/javascript">
         function confirmBack() {
             var result = confirm('Sind Sie sicher, dass Sie zur vorigen Seite zurückkehren wollen?');
@@ -18,48 +21,151 @@
     <div class="selecttable">
         <h1>Auswahl der Tabellen aus der aktiven Datenbank {{ db_name }}</h1>
         <h3>Bitte wählen Sie bis zu zwei Tabellen der Datenbank {{ db_name }} aus, um mit diesen zu arbeiten:</h3>
-        <form action="/tables" method="POST">
+        <div class="tip">&#x1F6C8;
+            <span class="tiptext">Ausgegraute Tabellen sind leer und können daher nicht verwendet werden. Per
+                Doppelklick auf einen Tabellennamen wird eine Tabellenvorschau angezeigt.
+                Mit Strg + Klick können zwei Tabellen gleichzeitig ausgewählt werden.</span>
+        </div>
+
+
+        <form id="table-form" action="/tables" method="POST">
             <div class="tablelist">
                 <div class="listcolumntitle">
 
                 </div>
                 <div class="tables">
-                    <select name="selectedtable" multiple size="15" required>
+                    <select id="multiSelect" name="selectedtable" multiple size="15" required>
                         {% for table_name in tables %}
-                        <option value="{{ table_name }}">{{ table_name }} mit den Spalten
+                        {% set table_total = tables[table_name] | length %}
+                        <option value="{{ table_name }}" {% if previews[table_name] | length==0 %} disabled {% endif %}>
+                            {{ table_name }} mit den Spalten
                             {% for column in tables[table_name] %}
+                            {% if table_total > 1 and column != tables[table_name][table_total - 2] and column !=
+                            tables[table_name][table_total - 1]%}
+                            {{ column }},
+                            {% elif table_total > 1 and column == tables[table_name][table_total - 2] %}
+                            {{ column }} und
+                            {% else %}
                             {{ column }}
+                            {% endif %}
                             {% endfor %}
                         </option>
                         {% endfor %}
+
                     </select>
                 </div>
             </div>
-            <div class="msg">{{ message }}</div>
+            <input type="checkbox" id="second-db-checkbox">
+            <label for="second-db-checkbox">Mit zweiter Datenbank verbinden</label>
+            <input type="hidden" id="engine-no" name="engine-no" value="{{ engine_no }}">
+            <div class="msg" id="msg">{{ message }}</div>
+
+
             <div class="buttons">
                 <div class="links">
                     <a href="{{ url_for('login_to_one_db') }}"><button onclick="confirmBack()">Zurück</button></a>
-                    <a href="{{ url_for('select_tables') }}"><button> Abbrechen </button></a>
                 </div>
-                <input type="hidden" id="engineno" name="engineno" value="{{ engine_no }}">
-                <input type="submit" value="Tabellen auswählen">
             </div>
+            <input type="submit" value="Tabellen auswählen">
+
+
 
         </form>
     </div>
+    {% for key in previews.keys() %}
+    <div class="modal">
+
+        <!-- Modal content -->
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Vorschau für die Tabelle {{ key }}</h2>
+            <table>
+                <thead>
+                    <tr>
+                        {% for column in tables[key] %}
+                        <th>{{ column }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if previews[key] | length == 0 %}
+                    <tr>
+                        <td colspan="{{ tables[key] | length }}">Keine passenden Einträge gefunden</td>
+                    </tr>
+                    {% else %}
+                    {% for row in previews[key] %}
+                    <tr>
+                        {% for item in row %}
+                        <td>{{ item }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+    {% endfor %}
     <script type="text/javascript">
+
+        const dbCheckbox = document.getElementById('second-db-checkbox');
         function limitSelection(selectElement, limit) {
             selectElement.addEventListener('change', function () {
                 const selectedOptions = Array.from(selectElement.selectedOptions);
                 if (selectedOptions.length > limit) {
-                    selectedOptions[selectedOptions.length - 1].selected = false;
+                    for (var selectCount = selectedOptions.length; selectCount > limit; --selectCount) {
+                        selectedOptions[selectCount - 1].selected = false;
+                    }
                     alert('Sie können nur maximal ' + limit + ' Tabellen auswählen.');
+                }
+                const engineNo = "{{ engine_no }}";
+                if (engineNo == 2 || selectedOptions.length > 1) {
+                    dbCheckbox.disabled = true;
+                    for (label of dbCheckbox.labels) {
+                        label.style.color = 'lightGray';
+                    }
+                } else {
+                    dbCheckbox.disabled = false;
+                    for (label of dbCheckbox.labels) {
+                        label.style.color = 'black';
+                    }
                 }
             });
         }
         const multiSelect = document.getElementById('multiSelect');
-        const limit = 2;
+        const engineNo = "{{ engine_no }}";
+        if (engineNo == 2) {
+            let limit = 1;
+            dbCheckbox.style.display = 'none';
+        } else {
+            limit = 2;
+        }
         limitSelection(multiSelect, limit)
+
+
+        const selOptions = document.querySelectorAll('option');
+        const modals = document.getElementsByClassName('modal');
+        const closeItems = document.getElementsByClassName('close');
+        for (let i = 0; i < selOptions.length; ++i) {
+            var optionId = i + 1;
+            selOptions[i].addEventListener('dblclick', function () {
+                modals[i].style.display = 'block';
+            });
+            closeItems[i].addEventListener('click', function () {
+                modals[i].style.display = 'none';
+            });
+
+        }
+        // When the user clicks anywhere outside of the modal, close it
+        document.onclick = function (event) {
+            for (let j = 0; j < modals.length; ++j) {
+                if (modals[j].style.display != 'none' && !Array.from(modals).includes(event.target)) {
+                    modals[j].style.display = 'none';
+                }
+            }
+        }
+
     </script>
 </body>
 

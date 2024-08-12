@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <title>SQL-Datenbanken</title>
+    <meta charset="utf-8">
+    <!-- <meta name="viewport" content="width=device-width, initial-scale=1"> -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/connect.css') }}">
+
+</head>
+
+<body>
+    <div class="connect">
+        <h1>Willkommen, {{username}}!</h1>
+        <h2>Sie können mit bis zu zwei Datenbanken arbeiten.</h2>
+        <div class="db-forms">
+            <form id=first-db action="/singledb" method="POST">
+                <h2 id="header-first">Bitte geben Sie folgende Daten für die erste Datenbank ein:</h2>
+
+                <div class="row">
+                    <div class="col-25">
+                        <label for="db-name1">Datenbank:</label>
+                    </div>
+                    <div class="col-75">
+                        <input type="text" id="db-name1" placeholder="Datenbankname" name="db-name1" required>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-25">
+                        <label for="db-dialect1">SQL-Dialekt:</label>
+                    </div>
+                    <div class="col-75">
+
+                        <select class="db-dialect" name="db-dialect1" id="db-dialect1" required>
+                            <option value="mariadb">MariaDB</option>
+                            <option value="postgresql">PostgreSQL</option>
+                        </select>
+
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-25">
+                        <label for="user-name1">Benutzername:</label>
+                    </div>
+                    <div class="col-75">
+                        <input type="text" name="user-name1" placeholder="Datenbankbenutzername" id="user-name1"
+                            required>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-25">
+                        <label for="password1">Passwort:</label>
+                    </div>
+                    <div class="col-75">
+                        <input type="password" name="password1" placeholder="Datenbankpasswort" id="password1" required>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-25">
+                        <label for="host-name1">Hostname:</label>
+                    </div>
+                    <div class="col-75">
+                        <select name="host-name1" id="host-name1" required>
+                            <option value="localhost">localhost</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-25">
+                        <label for="port-number1">Portnummer:</label>
+                    </div>
+                    <div class="col-75">
+                        <input type="number" class="port-number" name="port-number1" id="port-number1" value="3306"
+                            required>
+
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-25">
+                        <label for="encoding1">Zeichencodierung:</label>
+                    </div>
+                    <div class="col-75">
+                        <select name="encoding1" id="encoding1" required>
+                            <option value="utf8">UTF8</option>
+                            <option value="latin1">ISO 8859-1 bzw. Latin-1</option>
+                        </select>
+                    </div>
+                </div>
+
+                <input type="hidden" id="engine-no" name="engine-no" value=1>
+                <div class="msg">{{ message }}</div>
+                <div class="buttons">
+                    <input type="submit" name="db-one" value="Mit dieser Datenbank verbinden">
+                </div>
+            </form>
+
+            <form id=second-db action="/singledb" method="POST">
+                <h2 id="header-second">Bitte geben Sie folgende Daten für die zweite Datenbank ein:
+                </h2>
+                <div class="row">
+                    <div class="col-25">
+                        <label for="db-name2">Datenbank:</label>
+                    </div>
+                    <div class="col-75">
+                        <input type="text" id="db-name2" placeholder="Datenbankname" name="db-name2" required>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-25">
+                        <label for="db-dialect2">SQL-Dialekt:</label>
+                    </div>
+                    <div class="col-75">
+                        <select class="db-dialect" name="db-dialect2" id="db-dialect2" required>
+                            <option value="mariadb">MariaDB</option>
+                            <option value="postgresql">PostgreSQL</option>
+                        </select>
+
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-25">
+                        <label for="user-name2">Benutzername:</label>
+                    </div>
+                    <div class="col-75">
+                        <input type="text" name="user-name2" placeholder="Datenbankbenutzername" id="user-name2"
+                            required>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-25">
+                        <label for="password2">Passwort:</label>
+                    </div>
+                    <div class="col-75">
+                        <input type="password" name="password2" placeholder="Datenbankpasswort" id="password2" required>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-25">
+                        <label for="host-name2">Hostname:</label>
+                    </div>
+                    <div class="col-75">
+                        <select name="host-name2" id="host-name2" required>
+                            <option value="localhost">localhost</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-25">
+                        <label for="port-number2">Portnummer:</label>
+                    </div>
+                    <div class="col-75">
+                        <input type="number" class="port-number" name="port-number2" value="3306" id="port-number2"
+                            required>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-25">
+                        <label for="encoding2">Zeichencodierung:</label>
+                    </div>
+                    <div class="col-75">
+                        <select name="encoding2" id="encoding2" required>
+                            <option value="utf8">UTF8</option>
+                            <option value="latin1">ISO 8859-1 bzw. Latin-1</option>
+                        </select>
+                    </div>
+                </div>
+
+                <input type="hidden" id="engine-no" name="engine-no" value=2>
+                <div class="msg">{{ message }}</div>
+                <div class="buttons">
+                    <input type="submit" name="db-two" id="db-two" value="Mit dieser Datenbank verbinden">
+                </div>
+            </form>
+        </div>
+    </div>
+    <script>
+        /*function disableUnusedForm() {*/
+        const engineNo = "{{ engine_no | int }}";
+        let form;
+        let headline;
+        let submitButton;
+        if (engineNo == 1) {
+            form = document.getElementById("second-db");
+            headline = document.getElementById("header-second");
+            submitButton = document.getElementById("db-two");
+        } else if (engineNo == 2) {
+            form = document.getElementById("first-db");
+            headline = document.getElementById("header-first");
+            submitButton = document.getElementById("db-one");
+        }
+        headline.style.color = "lightGray";
+        let elements = form.elements;
+        for (let i = 0, len = elements.length; i < len; ++i) {
+            elements[i].disabled = true;
+            if (elements[i].labels != null) {
+                for (label of elements[i].labels) {
+                    label.style.backgroundColor = "lightGray";
+                }
+            }
+
+        }
+        submitButton.disabled = true;
+        /*}*/
+        /*var form = document.getElementById("second-db");
+        var elements = form.elements;
+        for (var i = 0, len = elements.length; i < len; ++i) {
+            elements[i].disabled = true;
+            for (label of elements[i].labels) {
+                label.style.backgroundColor = "lightGray";
+            }
+        }
+        document.getElementById("header-second").style.color = "lightGray";
+        const submitButton2 = document.getElementById('db-two');
+        submitButton2.disabled = true;*/
+        //disableUnusedForm();
+        const forms = document.querySelectorAll('form');
+        console.log(forms);
+        forms.forEach((form) => {
+            const dialectSelect = form.querySelector('.db-dialect');
+            const portNumberInput = form.querySelector('.port-number');
+            console.log(dialectSelect);
+            console.log(portNumberInput);
+            dialectSelect.addEventListener('change', (event) => {
+                if (event.target.value === 'mariadb') {
+                    portNumberInput.value = 3306;
+                } else if (event.target.value == 'postgresql') {
+                    portNumberInput.value = 5432;
+                } else {
+                    console.log(event.target.value);
+                }
+            });
+        });
+
+    </script>
+</body>
+
+</html>
