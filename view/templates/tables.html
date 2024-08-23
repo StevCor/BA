@@ -5,7 +5,7 @@
     <title>SQL-Datenbanken</title>
     <meta charset="utf-8">
     <!-- <meta name="viewport" content="width=device-width, initial-scale=1"> -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles/tables.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/table-selection.css') }}">
     <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.1/css/all.css">
     <script type="text/javascript">
         function confirmBack() {
@@ -20,21 +20,28 @@
 <body>
     <div class="selecttable">
         <h1>Auswahl der Tabellen aus der aktiven Datenbank {{ db_name }}</h1>
+        {% if engine_no == 1 %}
         <h3>Bitte wählen Sie bis zu zwei Tabellen der Datenbank {{ db_name }} aus, um mit diesen zu arbeiten:</h3>
+        {% elif engine_no == 2 %}
+        <h3>Bitte wählen Sie eine Tabelle der Datenbank {{ db_name }} aus, um mit dieser zu arbeiten:</h3>
+        {% endif %}
         <div class="tip">&#x1F6C8;
             <span class="tiptext">Ausgegraute Tabellen sind leer und können daher nicht verwendet werden. Per
                 Doppelklick auf einen Tabellennamen wird eine Tabellenvorschau angezeigt.
-                Mit Strg + Klick können zwei Tabellen gleichzeitig ausgewählt werden.</span>
+                {% if engine_no == 1 %}
+                Mit Strg + Klick können zwei Tabellen gleichzeitig ausgewählt werden.
+                {% endif %}
+            </span>
         </div>
 
 
         <form id="table-form" action="/tables" method="POST">
-            <div class="tablelist">
-                <div class="listcolumntitle">
+            <div class="table-list">
+                <div class="list-column-title">
 
                 </div>
                 <div class="tables">
-                    <select id="multiSelect" name="selectedtable" multiple size="15" required>
+                    <select id="multi-select" name="selected-table" multiple size="15" required>
                         {% for table_name in tables %}
                         {% set table_total = tables[table_name] | length %}
                         <option value="{{ table_name }}" {% if previews[table_name] | length==0 %} disabled {% endif %}>
@@ -55,7 +62,7 @@
                     </select>
                 </div>
             </div>
-            <input type="checkbox" id="second-db-checkbox">
+            <input type="checkbox" id="second-db-checkbox" name="second-db-checkbox">
             <label for="second-db-checkbox">Mit zweiter Datenbank verbinden</label>
             <input type="hidden" id="engine-no" name="engine-no" value="{{ engine_no }}">
             <div class="msg" id="msg">{{ message }}</div>
@@ -133,11 +140,16 @@
                 }
             });
         }
-        const multiSelect = document.getElementById('multiSelect');
+        const multiSelect = document.getElementById('multi-select');
         const engineNo = "{{ engine_no }}";
-        if (engineNo == 2) {
-            let limit = 1;
+        const tablesInUse = "{{ tables_in_use }}";
+        let limit;
+        if (engineNo == 2 || tablesInUse != 0) {
+            limit = 1;
             dbCheckbox.style.display = 'none';
+            for (label of dbCheckbox.labels) {
+                label.style.display = 'none';
+            }
         } else {
             limit = 2;
         }

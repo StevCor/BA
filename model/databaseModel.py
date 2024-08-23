@@ -1,8 +1,9 @@
+from argparse import ArgumentError
 from sqlalchemy import CursorResult, Engine, create_engine, text, bindparam
 import urllib.parse
 from sqlalchemy.exc import OperationalError as operror
 from sqlalchemy.exc import ArgumentError as argerror
-from model.SQLDatabaseError import DatabaseError, QueryError, UpdateError
+from model.SQLDatabaseError import DatabaseError, DialectError, QueryError, UpdateError
 
 def connect_to_db(username:str, password:str, host:str, port:int, db_name:str, db_dialect:str, db_encoding:str):
     db_url = f'{username}:{urllib.parse.quote_plus(password)}@{host}:{str(port)}/{db_name}'
@@ -166,7 +167,7 @@ def search_string(engine:Engine, table_name:str, cols_and_dtypes:dict, string_to
 
 def get_replacement_information(engine:Engine, table_name:str, affected_attributes_and_positions:list, cols_dtypes_and_numbertypes:dict, primary_keys:list, old_value:str, replacement:str):
     if len(affected_attributes_and_positions) != len(cols_dtypes_and_numbertypes.keys()):
-        raise QueryError('Für alle Attribute der Tabelle muss angegeben sein, ob sie von der Änderung betroffen sein können oder nicht.')
+        raise ArgumentError('Für alle Attribute der Tabelle muss angegeben sein, ob sie von der Änderung betroffen sein können oder nicht.')
     affected_attributes = []
     positions = []
     for item in affected_attributes_and_positions:
@@ -231,7 +232,7 @@ def get_replacement_information(engine:Engine, table_name:str, affected_attribut
             occurrence_counter += 1
             occurrence_dict[occurrence_counter] = {'row_no': row_no, 'primary_key': primary_key_value, 'affected_attribute': affected_attributes[0]}
     else:
-        raise QueryError('Es muss mindestens ein Attribut angegeben sein, dessen Werte bearbeitet werden sollen.')
+        raise ArgumentError('Es muss mindestens ein Attribut angegeben sein, dessen Werte bearbeitet werden sollen.')
     return row_nos_old_and_new_values, occurrence_dict
             
             
@@ -246,9 +247,14 @@ def get_indexes_of_affected_attributes_for_replacing(engine:Engine, table_name:s
     keys = ', '.join(primary_keys)
     query = 'SELECT'
     case_selected_attribute = 'THEN 1 ELSE 0 END'
-    case_nonselected_attribute = 'CASE WHEN 0 = 0 THEN 0 END'
+    case_nonselected_attribute = '0'
     operator, cast_data_type = set_operator_and_cast_data_type(engine.dialect.name)
-    condition = f"{operator} '%' || :old_value || '%'"
+    if engine.dialect.name == 'postgresql':
+        condition = f"{operator} '%' || :old_value || '%'"
+    elif engine.dialect.name == 'mariadb':
+        condition = f"{operator} CONCAT('%', CONCAT(:old_value, '%'))"
+    else:
+        raise DialectError(f'Der SQL-Dialekt {engine.dialect.name} wird nicht unterstützt.')
     for index, key in enumerate(cols_dtypes_and_numbertypes.keys()):
         if affected_attributes == None or (affected_attributes != None and key in affected_attributes):
             if cols_dtypes_and_numbertypes[key]['data_type_group'] != 0: #[1]
@@ -515,12 +521,18 @@ def get_row_number_of_affected_entries(engine:Engine, table_name:str, cols_dtype
         condition_params['old_value'] = old_value
         for index, attribute in enumerate(affected_attributes):
             attribute_to_search = convert_string_if_contains_capitals(attribute, engine.dialect.name).strip()
+            if engine.dialect.name == 'postgresql':
+                concat_string = "'%' || :old_value || '%'"
+            elif engine.dialect.name == 'mariadb':
+                concat_string = "CONCAT('%', CONCAT(:old_value, '%'))"
+            else:
+                raise DialectError(f'Der SQL-Dialekt {engine.dialect.name} wird nicht unterstützt.')
             if cols_dtypes_numbertypes_and_length[attribute]['data_type_group'] != 0:
                 attribute_to_search = f'CAST ({attribute_to_search} AS {cast_data_type})'
             if index == 0:
-                condition = f"{condition} sub.{attribute_to_search} {operator} '%' || :old_value || '%'"
+                condition = f"{condition} sub.{attribute_to_search} {operator} {concat_string}"
             else:
-                condition = f"{condition} OR sub.{attribute_to_search} {operator} '%' || :old_value || '%'"
+                condition = f"{condition} OR sub.{attribute_to_search} {operator} {concat_string}"
 
     elif mode == 'unify':
         affected_attribute = affected_attributes[0]
@@ -600,6 +612,7 @@ def get_primary_key_from_engine(engine:Engine, table_name:str):
     
     query = str()
     if engine.dialect.name == 'postgresql':
+        # https://wiki.postgresql.org/wiki/Retrieve_primary_key_columns
         query = text(f"SELECT a.attname as column_name FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) WHERE i.indrelid = '{table_name}'::regclass AND i.indisprimary")
     elif engine.dialect.name == 'mariadb':
         query = text(f"SELECT COLUMN_NAME as column_name FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{table_name}' AND COLUMN_KEY = 'PRI'")
@@ -695,19 +708,26 @@ def check_database_encoding(engine:Engine):
     return encoding
 
 def execute_sql_query(engine:Engine, query:text, params:dict = None, raise_exceptions:bool = False, commit:bool = None):
+    result = None
+    print(query)
     if params != None:
         for key in params.keys():
             query.bindparams(bindparam(key))
     try:
         connection = engine.connect()
         if engine.dialect.name == 'mariadb':
-            connection.execute(text("SET sql_mode='POSTGRESQL'"))
-        result = connection.execute(query, params)
+            connection.execute(text("SET sql_mode='ANSI_QUOTES'"))
+            connection.commit()
+        if params == None:
+            result = connection.execute(query)
+        else:
+            result = connection.execute(query, params)
     except Exception as error:
         if raise_exceptions:
             print(type(error), str(error))
             raise error
         else:
+            print(str(error))
             pass
     finally:
         try:
@@ -729,10 +749,13 @@ def check_data_type_and_constraint_compatibility(engine:Engine, table_name:str, 
     update_params['old_value'] = old_value
     pre_query = f'SELECT {column_name} FROM {table_name} WHERE'
     operator, cast_data_type = set_operator_and_cast_data_type(engine.dialect.name) 
+    string_to_search = "'%' || :old_value || '%'"
+    if engine.dialect.name == 'mariadb':
+        string_to_search = "CONCAT('%', CONCAT(:old_value, '%'))"
     if is_text_int_float_or_other == 0:
-        pre_query = f"{pre_query} {column_name} {operator} '%' || :old_value || '%' LIMIT 1"
+        pre_query = f"{pre_query} {column_name} {operator} {string_to_search} LIMIT 1"
     else:
-        pre_query = f"{pre_query} CAST({column_name} AS {cast_data_type}) {operator} '%' || :old_value || '%' LIMIT 1"
+        pre_query = f"{pre_query} CAST({column_name} AS {cast_data_type}) {operator} '%' {string_to_search} '%' LIMIT 1"
     print(pre_query)
     try:
         result = convert_result_to_list_of_lists(execute_sql_query(engine, text(pre_query), update_params, raise_exceptions = True, commit = False))
@@ -809,6 +832,10 @@ if __name__ == '__main__':
     yo = get_full_table_ordered_by_primary_key(engine, 'studierende', ['matrikelnummer'])
     for line in yo:
         print('line: ', line)
+    maria_engine = connect_to_db('root', 'arc-en-ciel', 'localhost', 3306, 'test', 'mariadb', 'utf8')
+    res = maria_engine.connect().execute(text("SELECT * FROM information_schema.columns WHERE TABLE_NAME = 'studierende';"))
+    for row in res:
+        print(row)
     # res = replace_all_string_occurrences(engine, 'studierende', ['matrikelnummer'], cols, '2', '23')
     # for row in res:
     #     print(row)
@@ -822,5 +849,6 @@ if __name__ == '__main__':
     result = engine.connect().execute(text(f"SELECT punktzahl FROM punkte WHERE punktzahl = '70' OR CAST(punktzahl AS CHAR) LIKE '%' || '70' || '%'"))
     for row in result:
         print('ROW: ', row)
+    print('unsigned' in 'bigint(20) unsigned')
 
 

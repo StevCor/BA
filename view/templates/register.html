@@ -18,11 +18,14 @@
             <label for="username">
                 <i class="fa fa-user"></i>
             </label>
-            <input type="text" name="username" placeholder="Benutzername" id="username" required>
+            <input type="text" name="username" placeholder="Benutzername" id="username" minlength="2" required>
             <label for="password">
                 <i class="fa fa-lock"></i>
             </label>
-            <input type="password" name="password" placeholder="Passwort" id="password" required>
+            <!---https://stackoverflow.com/questions/48345922/reference-password-validation-->
+            <input type="password" name="password" placeholder="Passwort" id="password"
+                pattern="^(?=\P{Ll}*\p{Ll})(?=\P{Lu}*\p{Lu})(?=\P{N}*\p{N})(?=[\p{L}\p{N}]*[^\p{L}\p{N}])[\s\S]{8,}$"
+                required>
             <div class="msg">{{ message }}</div>
             <input type="submit" value="Registrieren">
         </form>

@@ -1,10 +1,13 @@
 from flask import Flask, render_template, request, flash, redirect, session, abort, url_for, jsonify
 import os
 import re
+from sqlalchemy import Engine
 from waitress import serve
-from model.SQLDatabaseError import DatabaseError
+from ControllerClasses import TableMetaData
+from model.SQLDatabaseError import DatabaseError, DialectError
 from model.loginModel import register_new_user, login_user 
 from model.databaseModel import connect_to_db, get_column_names_data_types_and_max_length, get_primary_key_from_engine, list_all_tables_in_db_with_preview, search_string, get_row_count_from_engine, get_full_table, get_full_table_ordered_by_primary_key, get_unique_values_for_attribute, get_replacement_information, get_row_number_of_affected_entries, check_data_type_and_constraint_compatibility, replace_all_string_occurrences, replace_some_string_occurrences, update_to_unify_entries
+from model.twoTablesModel import check_basic_data_type_compatibility
 
 global engine_1
 global engine_2
@@ -14,11 +17,15 @@ global metadata_table_1
 global metadata_table_2
 global replacement_occurrence_dict
 global replacement_data_dict
+global basic_compatibility_list
+global data_type_information
 
 engine_1 = None
 engine_2 = None
 db_in_use = 0 # 0: keine Engine, 1: engine_1 ist nutzbar, 2: engine_2 ist nutzbar, 3: engine_ und engine_2 sind nutzbar
 tables_in_use = 0
+basic_compatibility_list = None
+data_type_information = None
 
 app = Flask(__name__, template_folder = 'view/templates', static_folder = 'view/static')
 
@@ -42,7 +49,7 @@ def check_login():
         if result[0] == True:
             session['logged_in'] = True
             session['username'] = request.form['username']
-            return redirect(url_for('set_up_db_connection', engine_no = 1))
+            return redirect(url_for('show_db_login_page', engine_no = 1))
         else:
             message = result[1]
     return render_template('login.html', message = message)
@@ -56,61 +63,130 @@ def register():
     return render_template('register.html', message = message)
 
 @app.route('/connect-to-db<int:engine_no>', methods = ['GET', 'POST'])
-def set_up_db_connection(engine_no):
+def show_db_login_page(engine_no):
     if not session.get('logged_in'):
         return redirect(url_for('start'))
     else:
         if request.method == 'GET':
-            return render_template('db-connect.html', username = session['username'], engine_no = engine_no)
-        elif request.method == 'POST':
-            if 'db-one' in request.form.keys():
-                db_name = request.form['db-name1']
-                db_dialect = request.form['db-dialect1']
-                username = request.form['user-name1']
-                password = request.form['password1']
-                host = request.form['host-name1']
-                port = request.form['port-number1']
-                db_encoding = request.form['encoding1']
-            elif 'db-two' in request.form.keys():
-                db_name = request.form['db-name2']
-                db_dialect = request.form['db-dialect2']
-                username = request.form['user-name2']
-                password = request.form['password2']
-                host = request.form['host-name2']
-                port = request.form['port-number2']
-                db_encoding = request.form['encoding2']
-            engine_no = int(request.form['engine-no'])
-            login_result = login_to_db(username, password, host, port, db_name, db_dialect, db_encoding)
-            if not login_result == 0:
-                message = ''
-                if login_result == 1:
-                    message = 'Sie haben sich bereits mit zwei Datenbanken verbunden.'
-                elif login_result == 2:
-                    message = 'Beim Aufbau der Datenbankverbindung ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.'
-                return render_template('db-connect.html', username = session['username'], engine_no = engine_no, message = message)
+            if engine_no == 2:
+                if engine_1.dialect.name == 'mariadb':
+                    sql_dialect = 'MariaDB'
+                elif engine_1.dialect.name == 'postgresql':
+                    sql_dialect = 'PostgreSQL'
+                else:
+                    raise DialectError(f'Der SQL-Dialekt {engine_1.dialect.name} wird nicht unterstützt.')
+                message = f'Tabelle {metadata_table_1.table} der Datenbank {engine_1.url.database} ({sql_dialect}) ausgewählt.'
             else:
-                engine_no = 0
-                if 'db-one' in request.form.keys():
-                    engine_no = 1
-                elif 'db-two' in request.form.keys():
-                    engine_no = 2
-                return redirect(url_for('select_tables_for_engine', eng = engine_no))
+                message = ''
+            return render_template('db-connect.html', username = session['username'], engine_no = engine_no, message = message)
+        
+@app.route('/connect-to-db', methods = ['POST'])
+def set_up_db_connection():
+    if not session.get('logged_in'):
+        return redirect(url_for('start'))
+    elif request.method == 'POST':
+        if 'db-one' in request.form.keys():
+            db_name = request.form['db-name1']
+            db_dialect = request.form['db-dialect1']
+            username = request.form['user-name1']
+            password = request.form['password1']
+            host = request.form['host-name1']
+            port = request.form['port-number1']
+            db_encoding = request.form['encoding1']
+        elif 'db-two' in request.form.keys():
+            db_name = request.form['db-name2']
+            db_dialect = request.form['db-dialect2']
+            username = request.form['user-name2']
+            password = request.form['password2']
+            host = request.form['host-name2']
+            port = request.form['port-number2']
+            db_encoding = request.form['encoding2']
+        engine_no = int(request.form['engine-no'])
+        login_result = login_to_db(username, password, host, port, db_name, db_dialect, db_encoding)
+        if not login_result == 0:
+            message = ''
+            if login_result == 1:
+                message = 'Sie haben sich bereits mit zwei Datenbanken verbunden.'
+            elif login_result == 2:
+                message = 'Beim Aufbau der Datenbankverbindung ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.'
+            return render_template('db-connect.html', username = session['username'], engine_no = engine_no, message = message)
+        else:
+            global engine_2
+            if 'db-one' in request.form.keys():
+                engine_no = 1
+            elif 'db-two' in request.form.keys() and engine_1.url == engine_2.url:
+                engine_2 = None
+                message = 'Bitte verbinden Sie sich mit einer anderen Datenbank.'
+                return render_template('db-connect.html', username = session['username'], engine_no = engine_no, message = message)
+            elif 'db-two' in request.form.keys():
+                engine_no = 2
+            return redirect(url_for('select_tables_for_engine', engine_no = engine_no))
             
-@app.route('/tables/<int:eng>', methods = ['GET'])
-def select_tables_for_engine(eng:int):
-    if not eng == 1 or eng == 2:
-        return None
-    if eng == 1:
-        engine = engine_1
-    elif eng == 2:
-        engine = engine_2
-    tables, previews = list_all_tables_in_db_with_preview(engine)
-    db_name = engine.url.database
-    message = f'Verbindung zur Datenbank {db_name} aufgebaut.'
-    return render_template('tables.html', engine_no = eng, db_name = db_name, tables = tables, previews = previews, message = message)
+@app.route('/tables/<int:engine_no>', methods = ['GET'])
+def select_tables_for_engine(engine_no:int):
+    if not session.get('logged_in'):
+        return redirect(url_for('start'))
+    elif request.method == 'GET':
+        if not engine_no == 1 and not engine_no == 2:
+            return None
+        if engine_no == 1:
+            engine = engine_1
+        elif engine_no == 2:
+            engine = engine_2
+        tables, previews = list_all_tables_in_db_with_preview(engine)
+        db_name = engine.url.database
+        message = f'Verbindung zur Datenbank {db_name} aufgebaut.'
+        return render_template('tables.html', engine_no = engine_no, db_name = db_name, tables = tables, previews = previews, tables_in_use = tables_in_use, message = message)
 
         
-
+@app.route('/tables', methods=['POST'])
+def select_tables():
+    if not session.get('logged_in') or (engine_1 == None and engine_2 == None):
+        return redirect(url_for('start'))
+    print(request)
+    global tables_in_use
+    global metadata_table_1
+    global metadata_table_2
+    engine_no = int(request.form['engine-no'])
+    engine = None
+    table_names = request.form.getlist('selected-table')
+    if engine_no == 1:
+        engine = engine_1
+    elif engine_no == 2:
+        engine = engine_2
+    else:
+        print('Fehler')
+    for table_name in table_names:
+        count = get_row_count_from_engine(engine, table_name)
+        if tables_in_use == 0:
+            tables_in_use += 1
+            metadata_table_1 = TableMetaData(engine, table_name, count)
+            columns = metadata_table_1.columns
+        elif tables_in_use == 1:
+            tables_in_use += 2
+            metadata_table_2 = TableMetaData(engine, table_name, count)
+            columns = metadata_table_2.columns
+        else:
+            tables, previews = list_all_tables_in_db_with_preview(engine)
+            message = 'Sie haben bereits zwei Tabellen ausgewählt.'
+            #TODO: REDIRECT
+            return render_template('tables.html', engine_no = engine_no, db_name = engine.url.database, tables = tables, previews = previews, tables_in_use = tables_in_use, message = message)
+    
+    if tables_in_use == 1:
+        if 'second-db-checkbox' in request.form.keys():
+            message = f'Tabelle {metadata_table_1.table} aus der Datenbank {engine.url.database} ausgewählt.'
+            return redirect(url_for('show_db_login_page', engine_no = 2))
+        else:
+            data = get_full_table_ordered_by_primary_key(engine, table_name, metadata_table_1.primary_keys)
+            return render_template('one-table.html', table_name = table_name, table_columns = columns, data = data)  
+    elif tables_in_use == 3:
+        global basic_compatibility_list
+        global data_type_information
+        basic_compatibility_list, compatibility_by_code, data_type_information = check_basic_data_type_compatibility(metadata_table_1, metadata_table_2, True)
+        return show_both_tables_separately(compatibility_by_code)
+        
+    
+    
 @app.route('/singledb', methods = ['POST', 'GET'])
 def login_to_one_db():
     if not session.get('logged_in'):
@@ -147,45 +223,11 @@ def login_to_one_db():
                     return render_template('tables.html')
         elif request.method == 'GET':
             return render_template('singledb.html', username = session['username'])
-        
-@app.route('/tables', methods=['POST'])
-def select_tables():
-    print(request)
-    global tables_in_use
-    global metadata_table_1
-    global metadata_table_2
-    engine_no = int(request.form['engineno'])
-    engine = None
-    table_name = request.form['selectedtable']
-    if len(request.form.getlist('selectedtable')) == 1:
-        print(tables_in_use)
-        print(engine_no)
-        if engine_no == 1:
-            engine = engine_1
-        elif engine_no == 2:
-            engine = engine_2
-        count = get_row_count_from_engine(engine, table_name)
-        if tables_in_use == 0:
-            tables_in_use += 1
-            metadata_table_1 = TableMetaData(engine, table_name, count)
-            columns = metadata_table_1.columns
-        elif tables_in_use == 1:
-            tables_in_use += 2
-            metadata_table_2 = TableMetaData(engine, table_name, count)
-            columns = metadata_table_2.columns
-        else:
-            tables, previews = list_all_tables_in_db_with_preview(engine)
-            return render_template('tables.html', engine_no = engine_no, db_name = engine.url.database, tables = tables, previews = previews, message = 'Sie haben bereits zwei Tabellen ausgewählt.')
-        data = get_full_table(engine, table_name)
-        return render_template('onetable.html', table_name = table_name, table_columns = columns, data = data)
-    else:
-        #TODO
-        table_names = request.form.getlist('selectedtable')
-        print(table_names)
-        return render_template('onetable.html', table_name = table_names, table_columns = columns)
    
 @app.route('/search', methods = ['POST', 'GET'] )
 def search_entries():
+    if not session.get('logged_in'):
+        return redirect(url_for('start'))
     db_name = engine_1.url.database
     table_name = metadata_table_1.table
     table_columns = metadata_table_1.columns
@@ -210,6 +252,8 @@ def search_entries():
 
 @app.route('/replace', methods = ['GET', 'POST'])
 def search_and_replace_entries():
+    if not session.get('logged_in'):
+        return redirect(url_for('start'))
     db_name = engine_1.url.database
     table_name = metadata_table_1.table
     table_columns = metadata_table_1.columns
@@ -218,7 +262,6 @@ def search_and_replace_entries():
         data = get_full_table_ordered_by_primary_key(engine_1, table_name, primary_keys)
         return render_template('replace.html', db_name = db_name, table_name = table_name, table_columns = table_columns, data = data)
     elif request.method == 'POST':
-        #TODO
         string_to_replace = request.form['string-to-replace']
         replacement_string = request.form['replacement-string']
         column_names = request.form['affected-attributes'].removeprefix('[').removesuffix(']').replace('\'', '').split(', ')
@@ -254,6 +297,8 @@ def search_and_replace_entries():
 
 @app.route('/replace-preview', methods = ['GET', 'POST'])
 def select_entries_to_update():
+    if not session.get('logged_in'):
+        return redirect(url_for('start'))
     db_name = engine_1.url.database
     table_name = metadata_table_1.table
     table_columns = metadata_table_1.columns
@@ -347,9 +392,9 @@ def select_entries_to_update():
                 elif error_code == 3:
                     message += f"\nDer eingegebene Wert \'{input}\' überschreitet die maximal erlaubte Zeichenanzahl {cols_dtypes_and_num_types[table_columns[index]]['char_max_length']} des Attributs {table_columns[index]}"
                 elif error_code == 4:
-                    message += f'\nDer gesuchte Wert {string_to_search} kommt im Attribut {table_columns[index]} nicht vor.'
+                    message += f'\nDer gesuchte Wert \'{string_to_search}\' kommt im Attribut {table_columns[index]} nicht vor.'
                 elif error_code == 5:
-                    message += f'\nDer eingegebene Wert \'{input}\' verletzt eine \'unique\'-Constraint des Attributs {table_columns[index]}.'
+                    message += f'\nDer eingegebene Wert \'{input}\' verletzt eine \'Unique\'-Constraint des Attributs {table_columns[index]}.'
                 elif error_code == 6:
                     message += f'\nDer eingegebene Wert \'{input}\' verletzt eine Constraint des Attributs {table_columns[index]}.'
                 elif error_code == 7:
@@ -370,18 +415,20 @@ def select_entries_to_update():
             replacement_data_dict, replacement_occurrence_dict = get_replacement_information(engine_1, table_name, attributes_and_positions, cols_dtypes_and_num_types, primary_keys, string_to_search, input) 
         # Falls dabei Fehler auftreten, ...
         except Exception as error:
-            raise error
+            # raise error
             # ... wird die Fehlermeldung übernommen ...
             message = str(error)
             # ... und der Nutzer zur Startseite der Suchen-und-Ersetzen-Funktion weitergeleitet.
             return render_template('replace.html', db_name = db_name, table_name = table_name, table_columns = table_columns, data = unchanged_data, message = message)
+        # Falls die Abfrage keine Ergebnisse liefert, ...
         else:
-            # Falls die Abfrage keine Ergebnisse liefert, ...
+            # ... das Ergebnis jedoch leer ist, ...
             if len(replacement_data_dict.values()) == 0:
-                # ... 
+                # ... wird dies auf der Webseite angezeigt.
                 message = 'Keine passenden Einträge gefunden.'
                 return render_template('replace.html', db_name = db_name, table_name = table_name, table_columns = table_columns, data = unchanged_data, message = message)
             else:
+                # Anderenfalls wird mithilfe der gewonnenen Daten unter localhost:8000/replace-preview die Vorschau erstellt.
                 return render_template('replace-preview.html', db_name = db_name, table_name = table_name, occurrence_dict = replacement_occurrence_dict, table_columns = table_columns, string_to_replace = string_to_search, replacement_string = input, replacement_data_dict = replacement_data_dict, affected_attributes = affected_attributes, message = message)
 
 
@@ -390,7 +437,9 @@ def select_entries_to_update():
 
 @app.route('/unify-selection', methods = ['GET', 'POST'])
 def select_entries_to_unify():
-    if request.method == 'GET':
+    if not session.get('logged_in'):
+        return redirect(url_for('start'))
+    elif request.method == 'GET':
         return redirect(url_for('unify_db_entries'), code = 302)
     elif request.method == 'POST':
         db_name = engine_1.url.database
@@ -401,7 +450,9 @@ def select_entries_to_unify():
 
 @app.route('/unify-preview', methods = ['GET', 'POST'])
 def show_affected_entries():
-    if request.method == 'GET':
+    if not session.get('logged_in'):
+        return redirect(url_for('start'))
+    elif request.method == 'GET':
         return redirect(url_for('unify_db_entries'), code = 302)
     elif request.method == 'POST':
         print(request)
@@ -466,6 +517,8 @@ def show_affected_entries():
 
 @app.route('/unify', methods = ['GET', 'POST'])
 def unify_db_entries():
+    if not session.get('logged_in'):
+        return redirect(url_for('start'))
     db_name = engine_1.url.database
     table_name = metadata_table_1.table
     table_columns = metadata_table_1.columns
@@ -490,6 +543,8 @@ def unify_db_entries():
 
 @app.route('/disconnect')
 def disconnect_from_single_db():
+    if not session.get('logged_in'):
+        return redirect(url_for('start'))
     global engine_1
     global db_in_use
     global tables_in_use
@@ -499,16 +554,42 @@ def disconnect_from_single_db():
     db_in_use = 0
     tables_in_use = 0
     metadata_table_1 = None
-    return render_template('singledb.html', username = session['username'])
+    
+    return redirect(url_for('show_db_login_page', engine_no = 1))
 
 
-@app.route('/twodbs')
-def login_to_two_dbs():
-    return None
+@app.route('/compare', methods = ['GET', 'POST'])
+def compare_two_dbs():
+    if not session.get('logged_in'):
+        return redirect(url_for('start'))
+    if request.method == 'GET':
+        #TODO
+        pass
+    elif request.method == 'POST':
+        attributes_to_join_on = request.form['attribute-selection']
+        table_1_columns = []
+        table_2_columns = []
+        cast = False
+        if 'table1-all' in request.form.keys(): 
+            table_1_columns = metadata_table_1.columns
+        else:
+            for attribute in request.form.getlist('columns-table1'):
+                table_1_columns.append(attribute)
+        if 'table2-all' in request.form.keys(): 
+            table_2_columns = metadata_table_2.columns
+        else:
+            for attribute in request.form.getlist('columns-table2'):
+                table_2_columns.append(attribute)
+        if 'cast' in request.form.keys():
+            cast = True
+
+
+
+    
     
 @app.route('/logout', methods = ['GET', 'POST'])
 def logout():
-    if request.method == 'GET':
+    if not session.get('logged_in') or request.method == 'GET':
         return redirect(url_for('start'))
     elif request.method == 'POST':
         # Daten der Session entfernen, um den Nutzer auszuloggen
@@ -559,20 +640,22 @@ def login_to_db(username, password, host, port, db_name, db_dialect, db_encoding
 # 7: anderer Fehler bei der Datenbankabfrage
 def check_validity_of_input_and_searched_value(table_name:str, input:str, cols_and_dtypes:dict, column_name:str, old_value:str):
     is_int_float_text_or_other = cols_and_dtypes[column_name]['data_type_group']
-    if is_int_float_text_or_other == 1 and not re.match(r'^[-+]?([[1-9]\d*|0])(\.[0]+)?$', input):
-        return 1
-    elif is_int_float_text_or_other == 2:
-        try:
-            input = float(input)
-        except ValueError:
+    if is_int_float_text_or_other == 1:
+        if not re.match(r'^[-+]?([[1-9]\d*|0])(\.[0]+)?$', input):
             return 1
-    elif is_int_float_text_or_other == 1 and not re.match(r'^[-+]?([[1-9]\d*|0])(\.[0]+)?$', old_value):
-        return 2
+        else:
+            try:
+                input = int(input)
+            except ValueError:
+                return 1
     elif is_int_float_text_or_other == 2:
-        try:
-            input = float(old_value)
-        except ValueError:
+        if not re.match(r'^[-+]?([[1-9]\d*|0])(\.[0]+)?$', input):
             return 2
+        else:
+            try:
+                input = float(input)
+            except ValueError:
+                return 2
     elif is_int_float_text_or_other == 0:
         char_max_length = cols_and_dtypes[column_name]['char_max_length']
         if char_max_length != None and len(input) > char_max_length:
@@ -590,20 +673,18 @@ def check_validity_of_input_and_searched_value(table_name:str, input:str, cols_a
             return 7
     else:
         return check_result
-
-class TableMetaData:
-    def __init__(self, engine, table_name, row_count):
-        self.engine = engine
-        self.table = table_name
-        self.primary_keys = get_primary_key_from_engine(engine, table_name)
-        column_names_and_data_types = get_column_names_data_types_and_max_length(engine, table_name)
-        self.columns = list(column_names_and_data_types.keys())
-        self.data_types = []
-        for key in column_names_and_data_types.keys():
-            self.data_types.append(column_names_and_data_types[key]['data_type'])
-
-        self.column_names_and_data_types = column_names_and_data_types
-        self.total_row_count = row_count
+    
+def show_both_tables_separately(compatibility_by_code:dict):
+    db_name_1 = engine_1.url.database
+    db_name_2 = engine_2.url.database
+    table_1 = metadata_table_1.table
+    table_2 = metadata_table_2.table
+    data_1 = get_full_table_ordered_by_primary_key(metadata_table_1.engine, metadata_table_1.table, metadata_table_1.primary_keys)
+    data_2 = get_full_table_ordered_by_primary_key(metadata_table_2.engine, metadata_table_2.table, metadata_table_2.primary_keys)
+    table_columns_1 = metadata_table_1.columns
+    table_columns_2 = metadata_table_2.columns
+    return render_template('two-tables.html', db_name_1 = db_name_1, table_name_1 = table_1, db_name_2 = db_name_2, table_name_2 = table_2, 
+                               table_columns_1 = table_columns_1, data_1 = data_1, table_columns_2 = table_columns_2, data_2 = data_2, comp_by_code = compatibility_by_code)
 
 
 if __name__ == '__main__':

@@ -36,6 +36,11 @@ body {
     text-align: center;
 }
 
+.connect h4 {
+    text-align: center;
+    font-weight: normal;
+}
+
 .db-forms {
     display: flex;
     justify-content: space-between;

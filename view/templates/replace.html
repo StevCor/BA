@@ -48,18 +48,6 @@
     {% include 'grid.html' %}
 
     <script>
-        /* const send = document.querySelector("#preview");
-
-        send.addEventListener("click", async () => {
-            const replaceInfo = document.querySelector("#replaceparams");
-            const formData = new FormData(replaceInfo);
-
-            const response = await fetch("{{ url_for('search_and_replace_entries')}}", {
-                method: "POST",
-                body: formData,
-            });
-            console.log(await response.json());
-        }); */
 
         function isEmpty() {
             if (document.forms['replaceparams'].replacement.value === "") {
