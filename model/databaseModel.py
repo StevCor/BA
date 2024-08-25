@@ -6,7 +6,7 @@ from sqlalchemy.exc import ArgumentError as argerror
 from model.SQLDatabaseError import DatabaseError, DialectError, QueryError, UpdateError
 
 def connect_to_db(username:str, password:str, host:str, port:int, db_name:str, db_dialect:str, db_encoding:str):
-    db_url = f'{username}:{urllib.parse.quote_plus(password)}@{host}:{str(port)}/{db_name}'
+    db_url = f'{username}:{urllib.parse.quote_plus(password)}@{host}:{str(port)}/{urllib.parse.quote_plus(db_name)}'
     engine_url = str()
     engine = None
     message = ''
@@ -121,7 +121,7 @@ def get_full_table(engine:Engine, table_name:str):
     return convert_result_to_list_of_lists(execute_sql_query(engine, query))   
 
 def get_full_table_ordered_by_primary_key(engine:Engine, table_name:str, primary_keys:list, convert:bool = True):
-    table_name = convert_string_if_contains_capitals(table_name, engine.dialect.name)
+    table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
     keys_for_ordering = ', '.join(primary_keys)
     query = text(f'SELECT * FROM {table_name} ORDER BY {keys_for_ordering}')
     if convert:
@@ -137,12 +137,12 @@ def search_string(engine:Engine, table_name:str, cols_and_dtypes:dict, string_to
             primary_key = key
         else:
             primary_key = f'{primary_key}, {key}'
-    table_name = convert_string_if_contains_capitals(table_name, engine.dialect.name)
+    table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
     string_to_search = escape_string(engine.dialect.name, string_to_search)
     sql_condition = 'WHERE'
     operator, cast_data_type = set_operator_and_cast_data_type(engine.dialect.name)
     for key in cols_and_dtypes.keys():
-        attribute_to_search = convert_string_if_contains_capitals(key, engine.dialect.name).strip()
+        attribute_to_search = convert_string_if_contains_capitals_or_spaces(key, engine.dialect.name).strip()
         if cols_and_dtypes[key]['data_type_group'] != 0:
             attribute_to_search = f'CAST ({attribute_to_search} AS {cast_data_type})'
         if sql_condition == 'WHERE':
@@ -241,7 +241,7 @@ def get_replacement_information(engine:Engine, table_name:str, affected_attribut
 
 
 def get_indexes_of_affected_attributes_for_replacing(engine:Engine, table_name:str, cols_dtypes_and_numbertypes:dict, primary_keys:list, old_value:str, affected_attributes:list = None):
-    table_name = convert_string_if_contains_capitals(table_name, engine.dialect.name)
+    table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
     string_to_replace = escape_string(engine.dialect.name, old_value)
     params_dict = {'old_value': string_to_replace}
     keys = ', '.join(primary_keys)
@@ -299,7 +299,7 @@ def get_indexes_of_affected_attributes_for_replacing(engine:Engine, table_name:s
 
 # alle Vorkommen eines Teilstrings ersetzen
 def replace_all_string_occurrences(engine:Engine, table_name:str, column_names:list, cols_and_dtypes:dict, string_to_replace:str, replacement_string:str, commit:bool = False):
-    table_name = convert_string_if_contains_capitals(table_name, engine.dialect.name)
+    table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
     string_to_replace = escape_string(engine.dialect.name, string_to_replace)
     replacement_string = escape_string(engine.dialect.name, replacement_string)
     primary_keys = ', '.join(get_primary_key_from_engine(engine, table_name))
@@ -309,7 +309,7 @@ def replace_all_string_occurrences(engine:Engine, table_name:str, column_names:l
         flag = ", 'g'"
     query = f'UPDATE {table_name} SET'
     for index, column_name in enumerate(column_names):
-        column_name = convert_string_if_contains_capitals(column_name, engine.dialect.name)
+        column_name = convert_string_if_contains_capitals_or_spaces(column_name, engine.dialect.name)
         is_text_int_float_or_other = cols_and_dtypes[column_name]['data_type_group']
         if is_text_int_float_or_other != 0:
             query = f"{query} {column_name} = :new_value_{str(index)}"
@@ -353,7 +353,7 @@ def replace_all_string_occurrences(engine:Engine, table_name:str, column_names:l
     return convert_result_to_list_of_lists(result)
 
 def replace_some_string_occurrences(engine:Engine, table_name:str, cols_and_dtypes:dict, occurrences_dict:dict, string_to_replace:str, replacement_string:str, commit:bool = False):
-    table_name = convert_string_if_contains_capitals(table_name, engine.dialect.name)
+    table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
     string_to_replace = escape_string(engine.dialect.name, string_to_replace)
     replacement_string = escape_string(engine.dialect.name, replacement_string)
     primary_key_attributes = occurrences_dict[0]['primary_keys']
@@ -410,8 +410,8 @@ def replace_some_string_occurrences(engine:Engine, table_name:str, cols_and_dtyp
     
 
 def replace_one_string(engine:Engine, table_name:str, column_name:str, string_to_replace:str, replacement_string:str, primary_keys_and_values:dict):
-    table_name = convert_string_if_contains_capitals(table_name, engine.dialect.name)
-    column_name = convert_string_if_contains_capitals(column_name, engine.dialect.name)
+    table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
+    column_name = convert_string_if_contains_capitals_or_spaces(column_name, engine.dialect.name)
     if type(string_to_replace) == str:
         string_to_replace = escape_string(engine.dialect.name, string_to_replace)
     if type(replacement_string) == str:
@@ -460,7 +460,7 @@ def replace_one_string(engine:Engine, table_name:str, column_name:str, string_to
 
 
 def update_to_unify_entries(engine:Engine, table_name:str, attribute_to_change:str, old_values:list, new_value:str, commit:bool):
-    query = f'UPDATE {convert_string_if_contains_capitals(table_name, engine.dialect.name)} SET {convert_string_if_contains_capitals(attribute_to_change, engine.dialect.name)} = :new_value'
+    query = f'UPDATE {convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)} SET {convert_string_if_contains_capitals_or_spaces(attribute_to_change, engine.dialect.name)} = :new_value'
     cols_and_dtypes = get_column_names_data_types_and_max_length(engine, table_name)
     condition_dict = {}
     print(old_values)
@@ -480,9 +480,9 @@ def update_to_unify_entries(engine:Engine, table_name:str, attribute_to_change:s
     condition = 'WHERE'
     for index, value in enumerate(old_values):
         if index == 0:
-            condition = f'{condition} {convert_string_if_contains_capitals(attribute_to_change, engine.dialect.name)} = :value_{str(index)}'
+            condition = f'{condition} {convert_string_if_contains_capitals_or_spaces(attribute_to_change, engine.dialect.name)} = :value_{str(index)}'
         else:
-            condition = f'{condition} OR {convert_string_if_contains_capitals(attribute_to_change, engine.dialect.name)} = :value_{str(index)}'
+            condition = f'{condition} OR {convert_string_if_contains_capitals_or_spaces(attribute_to_change, engine.dialect.name)} = :value_{str(index)}'
         condition_dict['value_' + str(index)] = value
     query = text(f'{query} {condition}')
     print('UPDATE-Anweisung:', query)
@@ -520,7 +520,7 @@ def get_row_number_of_affected_entries(engine:Engine, table_name:str, cols_dtype
         old_value = old_values[0]
         condition_params['old_value'] = old_value
         for index, attribute in enumerate(affected_attributes):
-            attribute_to_search = convert_string_if_contains_capitals(attribute, engine.dialect.name).strip()
+            attribute_to_search = convert_string_if_contains_capitals_or_spaces(attribute, engine.dialect.name).strip()
             if engine.dialect.name == 'postgresql':
                 concat_string = "'%' || :old_value || '%'"
             elif engine.dialect.name == 'mariadb':
@@ -545,9 +545,9 @@ def get_row_number_of_affected_entries(engine:Engine, table_name:str, cols_dtype
                 condition_params['value_' + str(index)] = float(value)
             
             if index == 0:
-                condition = f"{condition} sub.{convert_string_if_contains_capitals(affected_attribute, engine.dialect.name)} = :{'value_' + str(index)}"
+                condition = f"{condition} sub.{convert_string_if_contains_capitals_or_spaces(affected_attribute, engine.dialect.name)} = :{'value_' + str(index)}"
             else:
-                condition = f"{condition} OR sub.{convert_string_if_contains_capitals(affected_attribute, engine.dialect.name)} = :{'value_' + str(index)}"
+                condition = f"{condition} OR sub.{convert_string_if_contains_capitals_or_spaces(affected_attribute, engine.dialect.name)} = :{'value_' + str(index)}"
     query = text(f'{query} {condition}')
     result = execute_sql_query(engine, query, condition_params)
     if convert:
@@ -603,7 +603,7 @@ def get_column_names_data_types_and_max_length(engine:Engine, table_name:str):
 
 
 def get_primary_key_from_engine(engine:Engine, table_name:str):
-    table_name = convert_string_if_contains_capitals(table_name, engine.dialect.name)
+    table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
     # with engine.connect() as connection:
     #     if engine.dialect.name == 'postgresql':
     #         result = connection.execute(text(f"SELECT a.attname as column_name FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) WHERE i.indrelid = '{table_name}'::regclass AND i.indisprimary"))
@@ -647,7 +647,7 @@ def get_primary_key_names_and_data_types_from_engine(engine:Engine, table_name:s
         key_data_type_dict[as_tuple[0]] = as_tuple[1]
     return key_data_type_dict
 
-def get_row_count_from_engine(engine, table_name:str):
+def get_row_count_from_engine(engine:Engine, table_name:str):
     # with engine.connect() as connection:
     #     res = connection.execute(text(f'SELECT COUNT(1) FROM {table_name}'))
     # https://datawookie.dev/blog/2021/01/sqlalchemy-efficient-counting/
@@ -656,16 +656,16 @@ def get_row_count_from_engine(engine, table_name:str):
     return res.fetchone()[0] 
 
 def build_update_query(engine:Engine, table_name:str, column_names_of_affected_attributes:tuple, column_names_of_condition:tuple, values:tuple, operator:str):
-    table_name = convert_string_if_contains_capitals(table_name, engine.dialect.name)
+    table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
     if len(column_names_of_affected_attributes) + len(column_names_of_condition) != len(values):
         raise QueryError('Anzahl der Spaltennamen und Anzahl der Werte stimmen nicht überein.')
     query = f'UPDATE {table_name} SET'
     columns = ''
     for index, title in enumerate(column_names_of_affected_attributes):
         if len(column_names_of_affected_attributes) > 1 and index > 0:
-            columns = f'{columns},  {convert_string_if_contains_capitals(title, engine.dialect.name)} = :{title}'
+            columns = f'{columns},  {convert_string_if_contains_capitals_or_spaces(title, engine.dialect.name)} = :{title}'
         else:
-            columns = f'{columns}{convert_string_if_contains_capitals(title, engine.dialect.name)} = :{title}'
+            columns = f'{columns}{convert_string_if_contains_capitals_or_spaces(title, engine.dialect.name)} = :{title}'
     condition = build_sql_condition(column_names_of_condition, engine.dialect.name, operator)
     query = text(f'{query} {columns} {condition}')
     print(query)
@@ -688,7 +688,7 @@ def build_sql_condition(column_names:tuple, db_dialect:str, operator:str = None)
         for index, item in enumerate(column_names):
             if len(column_names) > 1 and index > 0:
                 condition = f'{condition} {operator.upper()}'
-            condition = f'{condition} {convert_string_if_contains_capitals(item, db_dialect)} = :{item}'
+            condition = f'{condition} {convert_string_if_contains_capitals_or_spaces(item, db_dialect)} = :{item}'
         return condition
 
 def check_database_encoding(engine:Engine):
@@ -743,8 +743,8 @@ def execute_sql_query(engine:Engine, query:text, params:dict = None, raise_excep
 def check_data_type_and_constraint_compatibility(engine:Engine, table_name:str, column_name:str, is_text_int_float_or_other:int, input, old_value:str):
     if type(input) not in (str, int, float):
         print('Datentyp kann nicht überprüft werden.')
-    table_name = convert_string_if_contains_capitals(table_name, engine.dialect.name)
-    column_name = convert_string_if_contains_capitals(column_name, engine.dialect.name)
+    table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
+    column_name = convert_string_if_contains_capitals_or_spaces(column_name, engine.dialect.name)
     update_params = {}
     update_params['old_value'] = old_value
     pre_query = f'SELECT {column_name} FROM {table_name} WHERE'
@@ -800,12 +800,34 @@ def set_operator_and_cast_data_type(db_dialect:str):
         cast_data_type = 'TEXT'
     return operator, cast_data_type
 
-
+def list_attributes_to_select(attributes_to_select:list[str], dialect:str, table_name:str = None, db_name:str = None):
+    attribute_string = ''
+    for index, attribute in enumerate(attributes_to_select):
+        query_attribute = attribute
+        if table_name != None:
+            if not table_name.startswith('"'):
+                table_name = convert_string_if_contains_capitals_or_spaces(table_name, dialect)
+            if db_name != None:
+                if not db_name.startswith('"'):
+                    db_name = convert_string_if_contains_capitals_or_spaces(db_name, dialect)
+                table_name = f'{db_name}.{table_name}'
+            if not query_attribute.startswith('"'):
+                query_attribute = convert_string_if_contains_capitals_or_spaces(query_attribute, dialect)
+            query_attribute = f'{table_name}.{query_attribute}'
+        if index == 0:
+            attribute_string = query_attribute
+        else:
+            attribute_string = f'{attribute_string} {query_attribute}'
+        if len(attributes_to_select) > 1 and attribute != attributes_to_select[len(attributes_to_select) - 1]:
+            attribute_string += ','
+        print(attribute_string)
+    return attribute_string
 
     
-# setzt String in doppelte Anführungszeichen, wenn darin Großbuchstaben enthalten sind (nötig für Tabellen- und Spaltennamen in PostgreSQL)
-def convert_string_if_contains_capitals(string:str, db_dialect:str):
-    if db_dialect == 'postgresql' and any([x.isupper() for x in string]):
+# setzt String in doppelte Anführungszeichen, wenn darin Leerzeichen oder Großbuchstaben enthalten sind (Letzteres ist ausschließlich für 
+# Tabellen- und Spaltennamen in PostgreSQL nötig)
+def convert_string_if_contains_capitals_or_spaces(string:str, db_dialect:str):
+    if (db_dialect == 'postgresql' and any([x.isupper() for x in string])) or any([x == ' ' for x in string]):
         string = f'"{string}"'
     return string
 

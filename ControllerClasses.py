@@ -2,7 +2,6 @@ from sqlalchemy import Engine
 
 from model.databaseModel import get_column_names_data_types_and_max_length, get_primary_key_from_engine
 
-
 class TableMetaData:
     def __init__(self, engine:Engine, table_name:str, row_count:int):
         self.engine = engine

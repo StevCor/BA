@@ -3,8 +3,211 @@ from math import ceil
 from sqlalchemy import Engine, text
 from ControllerClasses import TableMetaData
 from model.CompatibilityClasses import MariaInt, PostgresInt, get_int_value_by_dialect_name
-from model.databaseModel import get_primary_key_from_engine, convert_result_to_list_of_lists, execute_sql_query, convert_string_if_contains_capitals
+from model.databaseModel import get_primary_key_from_engine, convert_result_to_list_of_lists, execute_sql_query, convert_string_if_contains_capitals_or_spaces, list_attributes_to_select
 from model.SQLDatabaseError import DialectError, QueryError
+
+
+
+def join_tables_of_same_dialect_on_same_server(table_meta_data:list[TableMetaData], attributes_to_join_on:list[dict[str:str]], attributes_to_select_1:list[str], attributes_to_select_2:list[str], full_outer_join:bool = False, cast_direction:int = None):
+    engine_1 = table_meta_data[0].engine
+    engine_2 = table_meta_data[1].engine
+    dialect_1 = engine_1.dialect.name
+    dialect_2 = engine_2.dialect.name
+    if engine_1.url.host != engine_2.url.host or engine_1.url.port != engine_2.url.port:
+        raise ArgumentError(None, 'Mit dieser Funktion können nur Tabellen verbunden werden, die auf demselben Server liegen.')
+    elif dialect_1 != dialect_2:
+        raise ArgumentError(None, 'Die SQL-Dialekte der verwendeten Engines müssen übereinstimmen.')
+    try:
+        check_arguments_for_joining(table_meta_data, attributes_to_join_on, attributes_to_select_1, attributes_to_select_2, cast_direction)
+    except Exception as error:
+        raise error
+    
+    
+    table_1 = f'{convert_string_if_contains_capitals_or_spaces(table_meta_data[0].table, dialect_1)}'
+    table_2 = f'{convert_string_if_contains_capitals_or_spaces(table_meta_data[1].table, dialect_2)}'
+    db_name_1 = None
+    db_name_2 = None
+    if table_meta_data[0].engine.url.database != table_meta_data[1].engine.url.database:
+        db_name_1 = table_meta_data[0].engine.url.database
+        db_name_2 = table_meta_data[1].engine.url.database
+    attribute_to_join_on_1 = list(attributes_to_join_on[0].keys())[0]
+    attribute_to_join_on_2 = list(attributes_to_join_on[1].keys())[0]
+    join_attribute_1 = f'{table_1}.{convert_string_if_contains_capitals_or_spaces(attribute_to_join_on_1, dialect_1)}'
+    join_attribute_2 = f'{table_2}.{convert_string_if_contains_capitals_or_spaces(attribute_to_join_on_2, dialect_2)}'
+    
+
+    if attribute_to_join_on_1 in attributes_to_select_1 and attribute_to_join_on_2 in attributes_to_select_2:
+        attributes_to_select_2.pop(attributes_to_select_2.index(attribute_to_join_on_2))
+    delimiter = ','
+    if len(attributes_to_select_1) == 0:
+        delimiter = ''
+        attributes_table_1 = ''
+    else:
+        attributes_table_1 = list_attributes_to_select(attributes_to_select_1, dialect_1, table_1, db_name_1)
+    if len(attributes_to_select_2) == 0:
+        delimiter = ''
+        
+    join_query = f'SELECT {attributes_table_1}{delimiter}'
+    if len(attributes_to_select_2) > 0:
+        attributes_table_2 = list_attributes_to_select(attributes_to_select_2, dialect_2, table_2, db_name_2)
+        join_query = f'{join_query} {attributes_table_2}'
+    
+
+    data_type_1 = attributes_to_join_on[0][attribute_to_join_on_1]
+    data_type_2 = attributes_to_join_on[1][attribute_to_join_on_2]
+    if cast_direction != None:
+        if cast_direction == 1:
+            join_attribute_1 = f'CAST ({join_attribute_1} AS {data_type_2})'
+        elif cast_direction == 2:
+            join_attribute_2 = f'CAST ({join_attribute_2} AS {data_type_1})'
+    
+    if full_outer_join:
+        if dialect_1 == 'mariadb':
+            join_query = f'{join_query} FROM {table_1} LEFT JOIN {table_2} ON {join_attribute_1} = {join_attribute_2} UNION ({join_query} FROM {table_1} RIGHT JOIN {table_2} ON {join_attribute_1} = {join_attribute_2})'
+
+        
+        elif dialect_1 == 'postgresql':
+            join_query = f'{join_query} FROM {table_1} FULL OUTER JOIN {table_2} ON {join_attribute_1} = {join_attribute_2}'
+            filter_count_table_1 = f'{table_2}.{convert_string_if_contains_capitals_or_spaces(table_meta_data[1].primary_keys[0], dialect_2)}'
+            filter_count_table_2 = f'{table_1}.{convert_string_if_contains_capitals_or_spaces(table_meta_data[0].primary_keys[0], dialect_1)}'
+            count_query = f'SELECT COUNT(*) FILTER (WHERE {filter_count_table_1} IS NULL), COUNT(*) FILTER (WHERE {filter_count_table_2} IS NULL) FROM {table_1} FULL JOIN {table_2} ON {join_attribute_1} = {join_attribute_2}'
+            count_result = execute_sql_query(engine_1, text(count_query))
+            counts = list(count_result.fetchone())     
+    else:
+        if dialect_1 == 'mariadb' or dialect_1 == 'postgresql':
+            join_query = f'{join_query} FROM {table_1} INNER JOIN {table_2} ON {join_attribute_1} = {join_attribute_2}'
+
+    joined_table_result = convert_result_to_list_of_lists(execute_sql_query(engine_1, text(join_query)))
+
+    unmatched_rows = {}
+    condition_attributes = [attributes_to_select_1, attributes_to_select_2]
+    tables = [table_1, table_2] 
+    db_names = [db_name_1, db_name_2]
+    dialects = [dialect_1, dialect_2]
+    join_attributes = [join_attribute_1, join_attribute_2]
+    for index, table in enumerate(tables):
+        select_all_from_table = list_attributes_to_select(condition_attributes[index], dialects[index], table, db_names[index])
+        if index == 0:
+            direction = 'LEFT'
+        else:
+            direction = 'RIGHT'
+        unmatched_rows_query = f'SELECT {select_all_from_table} FROM {table_1} {direction} OUTER JOIN {table_2} ON {join_attribute_1} = {join_attribute_2}'
+        condition = f'WHERE {join_attributes[(index + 1) % 2]} IS NULL'
+        unmatched_rows_query = f'{unmatched_rows_query} {condition}'
+        unmatched_rows[tables[index]] = convert_result_to_list_of_lists(execute_sql_query(table_meta_data[index].engine, text(unmatched_rows_query)))
+
+    return joined_table_result, unmatched_rows
+    
+def join_tables_of_different_dialects(table_meta_data:list[TableMetaData], attributes_to_join_on:list[dict[str:str]], attributes_to_select_1:list[str], attributes_to_select_2:list[str], full_outer_join:bool = False, cast_direction:int = None):
+    try:
+        check_arguments_for_joining(table_meta_data, attributes_to_join_on, attributes_to_select_1, attributes_to_select_2, cast_direction)
+    except Exception as error:
+        raise error
+    table_meta_data_1 = table_meta_data[0]
+    table_meta_data_2 = table_meta_data[1]
+    table_1 = table_meta_data_1.table
+    table_2 = table_meta_data_2.table
+    tables = [table_1, table_2]
+    engines = [table_meta_data_1.engine, table_meta_data_2.engine]
+    attributes_to_select = [attributes_to_select_1, attributes_to_select_2]
+    results = {}
+    result_columns = []
+    join_attributes = []
+    for index, engine in enumerate(engines):
+        selection = ', '.join(attributes_to_select[index])
+        join_attributes.append(list(attributes_to_join_on[index].keys())[0])
+        if join_attributes[index] not in attributes_to_select[index]:
+            selection = f'{selection}, {join_attributes[index]}'
+        query = f'SELECT {selection} FROM {convert_string_if_contains_capitals_or_spaces(tables[index], engine.dialect.name)}'
+        result = execute_sql_query(engine, text(query))
+        result_columns.append(list(result.keys()))
+        results[tables[index]] = convert_result_to_list_of_lists(result)
+       
+    data_type_1 = attributes_to_join_on[0][join_attributes[0]] 
+    data_type_2 = attributes_to_join_on[1][join_attributes[1]] 
+    join_attribute_index_1 = result_columns[0].index(join_attributes[0])
+    join_attribute_index_2 = result_columns[1].index(join_attributes[1])
+    joined_table = []
+    match_counter_table_2 = [0] * len(results[table_2])
+    for row_1 in results[table_1]:
+        print('row_1: ', row_1)
+        row_1_match_counter = 0
+        for row_index, row_2 in enumerate(results[table_2]):
+            print('row_2: ', row_2)
+            is_match = False
+            if row_1[join_attribute_index_1] != None and row_2[join_attribute_index_2] != None:
+                if row_1[join_attribute_index_1] == row_2[join_attribute_index_2]:
+                    is_match = True
+                elif data_type_1 == 'boolean':
+                    if data_type_2 == 'integer':
+                        if int(row_1[join_attribute_index_1]) == row_2[join_attribute_index_2]:
+                            is_match = True
+                    elif data_type_2 == 'decimal':
+                        if float(row_1[join_attribute_index_1]) == row_2[join_attribute_index_2]:
+                            is_match = True
+                    elif data_type_2 == 'text':
+                        if str(row_1[join_attribute_index_1]) == row_2[join_attribute_index_2]:
+                            is_match = True
+                elif data_type_1 == 'integer':
+                    if data_type_2 == 'boolean':
+                        if row_1[join_attribute_index_1] == int(row_2[join_attribute_index_2]):
+                            is_match = True
+                    elif data_type_2 == 'text':
+                        if str(row_1[join_attribute_index_1]) == row_2[join_attribute_index_2]:
+                            is_match = True
+                elif data_type_1 == 'decimal':
+                    if data_type_2 == 'text':
+                        if str(row_1[join_attribute_index_1]) == row_2[join_attribute_index_2]:
+                            is_match = True
+                elif data_type_1 == 'text':
+                    if row_1[join_attribute_index_1] == str(row_2[join_attribute_index_2]):
+                        is_match = True
+            row_2_copy = row_2.copy()
+            if join_attributes[1] in attributes_to_select_2:
+                row_2_copy.pop(join_attribute_index_2)
+            if is_match:
+                row_1_match_counter += 1
+                match_counter_table_2[row_index] += 1
+                joined_table.append(row_1.copy()+ row_2_copy)
+            else:
+                if full_outer_join and row_index == len(results[table_2]) - 1:
+                    if match_counter_table_2[row_index] == 0:
+                        joined_table.append(([None] * len(results[table_1][0]) + row_2_copy))
+        if full_outer_join and row_1_match_counter == 0:
+            if join_attributes[1] in attributes_to_select_2:
+                empty_values = len(attributes_to_select_2) - 1
+            else:
+                empty_values = len(attributes_to_select_2)
+            joined_table.append(row_1 + [None] * empty_values)
+    if join_attributes[1]  in attributes_to_select_2:
+        result_columns[1].pop(join_attribute_index_2)
+    column_names_for_display = [table_1 + '.' + col_1 for col_1 in result_columns[0]] + [table_2 + '.' + col_2 for col_2 in result_columns[1]]
+    return joined_table, column_names_for_display
+
+
+
+
+def check_arguments_for_joining(table_meta_data:list[TableMetaData], attributes_to_join_on:list[dict[str:str]], attributes_to_select_1:list[str], attributes_to_select_2:list[str], cast_direction:int = None):
+    engine_1 = table_meta_data[0].engine
+    engine_2 = table_meta_data[1].engine
+    dialect_1 = engine_1.dialect.name
+    dialect_2 = engine_2.dialect.name
+    if dialect_1 not in ('mariadb', 'postgresql') or dialect_2 not in ('mariadb', 'postgresql'):
+        raise DialectError(f'Ein angegebener SQL-Dialekt wird nicht unterstützt.')
+    elif len(attributes_to_join_on) != 2:
+        raise ArgumentError(None, 'Die Tabellen können nur über zwei Attribute miteinander verbunden werden.')
+    elif len(table_meta_data) != 2:
+        raise ArgumentError(None, 'Es müssen exakt zwei Tabellen angegeben werden, die verbunden werden sollen.')
+    elif len(attributes_to_select_1) + len(attributes_to_select_2) <= 0:
+        raise ArgumentError(None, 'Es muss mindestens ein Attribut ausgewählt werden, das zurückgegeben werden soll.')
+    elif cast_direction not in (None, 1, 2):
+        raise ArgumentError(None, 'Bitte geben Sie den Wert 1 an, wenn das Verbindungsattribut von Tabelle 1 konvertiert werden soll, 2 für eine Konversion des Verbindungsattributs von Tabelle 2 und für das Auslassen von Konversionen den Wert None.')
+    elif any([type(item) != TableMetaData for item in table_meta_data]):
+        raise TypeError(None, 'Die Tabellenmetadaten müssen vom Typ TableMetaData sein.')
+
+
+
+### ZU viel mit Kompatibilität aufgehalten
 
 def check_data_type_meta_data(engines:list[Engine], table_names:list[str]):
     if not 0 < len(engines) <= 2 or len(table_names) != 2:
@@ -28,19 +231,19 @@ def check_data_type_meta_data(engines:list[Engine], table_names:list[str]):
         print(query)
         # für PostgreSQL fehlt noch die Angabe, ob es sich um einen Primärschlüssel oder ein Attribut mit Unique-Constraint handelt
         if engine.dialect.name == 'postgresql':
-            constraint_query = f"SELECT a.attname, i.table_name FROM pg_constraint con JOIN pg_attribute a ON a.attnum = ANY(con.conkey) JOIN information_schema.columns i ON a.attname = i.column_name AND"
+            constraint_query = f"SELECT i.table_name, a.attnameFROM pg_constraint con JOIN pg_attribute a ON a.attnum = ANY(con.conkey) JOIN information_schema.columns i ON a.attname = i.column_name AND"
             if len(engines) == 1:
-                table_name_1 = convert_string_if_contains_capitals(table_names[0], engine.dialect.name)
-                table_name_2 = convert_string_if_contains_capitals(table_names[1], engine.dialect.name)
+                table_name_1 = convert_string_if_contains_capitals_or_spaces(table_names[0], engine.dialect.name)
+                table_name_2 = convert_string_if_contains_capitals_or_spaces(table_names[1], engine.dialect.name)
                 constraint_query = f"{constraint_query} (i.table_name = '{table_name_1}' OR i.table_name = '{table_name_2}') WHERE (con.conrelid = ('{table_name_1}'::regclass) OR con.conrelid = ('{table_name_2}'::regclass)) AND con.conrelid = a.attrelid AND (con.contype = 'p' OR con.contype = 'u') AND i.table_catalog = '{engine.url.database}'"
             else:
-                table_name = convert_string_if_contains_capitals(table_names[index], engine.dialect.name)
+                table_name = convert_string_if_contains_capitals_or_spaces(table_names[index], engine.dialect.name)
                 constraint_query = f"{constraint_query} i.table_name = '{table_name}' WHERE con.conrelid = ('{table_name}'::regclass) AND con.conrelid = a.attrelid AND (con.contype = 'p' OR con.contype = 'u') AND i.table_catalog = '{engine.url.database}'"
             constraint_result = execute_sql_query(engine, text(constraint_query))
             unique_list = []
             for entry in constraint_result:
-                if [entry[1], entry[0]] not in unique_list:
-                    unique_list.append([entry[1], entry[0]])
+                if [entry[0], entry[1]] not in unique_list:
+                    unique_list.append([entry[0], entry[1]])
         for row in result:
             table_name = row[0]
             if table_name == table_names[0]:
@@ -71,7 +274,9 @@ def check_data_type_meta_data(engines:list[Engine], table_names:list[str]):
             elif character_max_length != None:
                 result_dict[table_key][column_name] = {'data_type_group': 'text', 'data_type': data_type, 'character_max_length': character_max_length}
             elif numeric_precision != None:
-                if ('int' in data_type or 'bool' in data_type) and numeric_scale == 0:
+                if (engine.dialect.name == 'mariadb' and row[9].lower() == 'tinyint(1)') or (engine.dialect.name == 'postgresql' and data_type == 'boolean'):
+                    result_dict[table_key][column_name] = {'data_type_group': 'boolean', 'data_type': 'boolean'}
+                elif 'int' in data_type or numeric_scale == 0:
                     result_dict[table_key][column_name] = {'data_type_group': 'integer', 'data_type': data_type, 'numeric_precision': numeric_precision}
                 else:
                     result_dict[table_key][column_name] = {'data_type_group': 'decimal', 'data_type': data_type, 'numeric_precision': numeric_precision, 'numeric_scale': numeric_scale}
@@ -152,8 +357,8 @@ def check_data_type_compatibility(table_meta_data_1:TableMetaData, table_meta_da
         cast_list = []
         row_list = []
         for column_name_2 in table_meta_data_2.columns:
-            column_name_1 = convert_string_if_contains_capitals(column_name_1, engine_1)
-            column_name_2 = convert_string_if_contains_capitals(column_name_2, engine_2)
+            column_name_1 = convert_string_if_contains_capitals_or_spaces(column_name_1, engine_1)
+            column_name_2 = convert_string_if_contains_capitals_or_spaces(column_name_2, engine_2)
             if engine_1.dialect.name == engine_2.dialect.name:
                 # wenn alle Einträge im Datentypinfo-Dictionary gleich sind, sind die Datentypen vollständig identisch und somit kompatibel
                 if dtype_info[table_key_1][column_name_1] == dtype_info[table_key_1][column_name_1]:

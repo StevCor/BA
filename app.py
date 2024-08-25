@@ -618,7 +618,7 @@ def login_to_db(username, password, host, port, db_name, db_dialect, db_encoding
     else:
         try: 
             db_engine = connect_to_db(username, password, host, port, db_name, db_dialect, db_encoding)
-        except DatabaseError as error:
+        except DatabaseError:
             status = 2
         else:
             if not engine_1:
@@ -689,5 +689,7 @@ def show_both_tables_separately(compatibility_by_code:dict):
 
 if __name__ == '__main__':
     app.secret_key = os.urandom(12)
+    print(20 == 20.0)
+    print(20 == 20.04)
     serve(app, host = '0.0.0.0', port = 8000)
     
