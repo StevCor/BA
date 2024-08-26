@@ -106,7 +106,7 @@ def list_all_tables_in_db_with_preview(engine:Engine):
     result = execute_sql_query(engine, query)
     for row in result:
         current_table = ''.join(tuple(row))
-        query = f'SELECT * FROM {current_table} LIMIT 20'
+        query = f'SELECT * FROM {convert_string_if_contains_capitals_or_spaces(current_table, engine.dialect.name)} LIMIT 20'
         preview_result = execute_sql_query(engine, text(query))
         column_names = list(preview_result.keys())
         preview_list = convert_result_to_list_of_lists(preview_result)

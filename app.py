@@ -7,7 +7,7 @@ from ControllerClasses import TableMetaData
 from model.SQLDatabaseError import DatabaseError, DialectError
 from model.loginModel import register_new_user, login_user 
 from model.databaseModel import connect_to_db, get_column_names_data_types_and_max_length, get_primary_key_from_engine, list_all_tables_in_db_with_preview, search_string, get_row_count_from_engine, get_full_table, get_full_table_ordered_by_primary_key, get_unique_values_for_attribute, get_replacement_information, get_row_number_of_affected_entries, check_data_type_and_constraint_compatibility, replace_all_string_occurrences, replace_some_string_occurrences, update_to_unify_entries
-from model.twoTablesModel import check_basic_data_type_compatibility
+from model.twoTablesModel import check_basic_data_type_compatibility, join_tables_of_different_dialects, join_tables_of_same_dialect_on_same_server
 
 global engine_1
 global engine_2
@@ -31,19 +31,14 @@ app = Flask(__name__, template_folder = 'view/templates', static_folder = 'view/
 
 
 
-#TODO: Routen '/' und 'login' zusammenführen
 @app.route('/')
 def start(): 
-    if not session.get('logged_in'):
-        return render_template('login.html', message = 'Bitte loggen Sie sich ein, um fortzufahren.')
-    else:
-        return redirect(url_for('login_to_one_db', engine_no = 1))
+    return redirect(url_for('check_login'))
     
 
 @app.route('/login', methods=['POST', 'GET'])
 def check_login():
-    message = ''
-    flash('Hi!')
+    message = 'Bitte loggen Sie sich ein, um das Tool zu nutzen.'
     if request.method == 'POST':
         result = login_user(request.form['username'], request.form['password'])
         if result[0] == True:
@@ -154,8 +149,6 @@ def select_tables():
         engine = engine_1
     elif engine_no == 2:
         engine = engine_2
-    else:
-        print('Fehler')
     for table_name in table_names:
         count = get_row_count_from_engine(engine, table_name)
         if tables_in_use == 0:
@@ -167,23 +160,20 @@ def select_tables():
             metadata_table_2 = TableMetaData(engine, table_name, count)
             columns = metadata_table_2.columns
         else:
-            tables, previews = list_all_tables_in_db_with_preview(engine)
             message = 'Sie haben bereits zwei Tabellen ausgewählt.'
-            #TODO: REDIRECT
-            return render_template('tables.html', engine_no = engine_no, db_name = engine.url.database, tables = tables, previews = previews, tables_in_use = tables_in_use, message = message)
-    
+            return redirect(url_for('compare_two_dbs'))
+            
     if tables_in_use == 1:
         if 'second-db-checkbox' in request.form.keys():
             message = f'Tabelle {metadata_table_1.table} aus der Datenbank {engine.url.database} ausgewählt.'
             return redirect(url_for('show_db_login_page', engine_no = 2))
         else:
             data = get_full_table_ordered_by_primary_key(engine, table_name, metadata_table_1.primary_keys)
+            #TODO: replace with search.html
             return render_template('one-table.html', table_name = table_name, table_columns = columns, data = data)  
     elif tables_in_use == 3:
-        global basic_compatibility_list
-        global data_type_information
-        basic_compatibility_list, compatibility_by_code, data_type_information = check_basic_data_type_compatibility(metadata_table_1, metadata_table_2, True)
-        return show_both_tables_separately(compatibility_by_code)
+        return redirect(url_for('compare_two_dbs'))
+        
         
     
     
@@ -563,29 +553,72 @@ def compare_two_dbs():
     if not session.get('logged_in'):
         return redirect(url_for('start'))
     if request.method == 'GET':
-        #TODO
-        pass
+        global basic_compatibility_list
+        global data_type_information
+        basic_compatibility_list, compatibility_by_code, data_type_information = check_basic_data_type_compatibility(metadata_table_1, metadata_table_2, True)
+        return show_both_tables_separately(compatibility_by_code)
     elif request.method == 'POST':
-        attributes_to_join_on = request.form['attribute-selection']
-        table_1_columns = []
-        table_2_columns = []
+        target_table = request.form['table-selection']
+        join_attribute_string = request.form['attribute-selection'] #.removeprefix('(').removesuffix(')').replace("\'", '')
+        join_attributes = join_attribute_string.split(', ')
+        print('JOIN ON: ', join_attributes)
+        print('wtf', join_attribute_string)
+        table_meta_data_for_join_1 = None
+        table_meta_data_for_join_2 = None
+        selected_columns_table_1 = []
+        selected_columns_table_2 = [] 
+        attributes_to_join_on = []
+        if target_table != 'table_1':
+            table_meta_data_for_join_1 = metadata_table_2.copy()
+            table_meta_data_for_join_2 = metadata_table_1.copy()
+            selected_columns_table_1 = request.form.getlist('columns-table2')
+            selected_columns_table_2 =  request.form.getlist('columns-table1')
+            helper_attribute = join_attributes[0]
+            join_attributes[0] = join_attributes[1]
+            join_attributes[1] = helper_attribute            
+        else:
+            table_meta_data_for_join_1 = metadata_table_1
+            table_meta_data_for_join_2 = metadata_table_2
+            selected_columns_table_1 =  request.form.getlist('columns-table1')
+            selected_columns_table_2 = request.form.getlist('columns-table2')
+        meta_data_list = [table_meta_data_for_join_1, table_meta_data_for_join_2]
         cast = False
-        if 'table1-all' in request.form.keys(): 
-            table_1_columns = metadata_table_1.columns
-        else:
-            for attribute in request.form.getlist('columns-table1'):
-                table_1_columns.append(attribute)
-        if 'table2-all' in request.form.keys(): 
-            table_2_columns = metadata_table_2.columns
-        else:
-            for attribute in request.form.getlist('columns-table2'):
-                table_2_columns.append(attribute)
+        
+        
         if 'cast' in request.form.keys():
             cast = True
+        for index, attribute in enumerate(join_attributes):
+            data_type = meta_data_list[index].column_names_and_data_types[attribute]['data_type']
+            attributes_to_join_on.append({attribute: data_type})
+        if table_meta_data_for_join_1.engine.dialect.name == table_meta_data_for_join_2.engine.dialect.name:
+            try:
+                data, column_names = join_tables_of_same_dialect_on_same_server(meta_data_list, attributes_to_join_on, selected_columns_table_1, selected_columns_table_2)
+            except Exception as error:
+                flash(str(error))
+                return redirect(url_for('compare_two_dbs'))
+        else:
+            try:
+                data, column_names = join_tables_of_different_dialects(meta_data_list, attributes_to_join_on, selected_columns_table_1, selected_columns_table_2)
+            except Exception as error:
+                flash(str(error))
+                return redirect(url_for('compare_two_dbs'))
+        db_name_1 = table_meta_data_for_join_1.engine.url.database
+        db_name_2 = table_meta_data_for_join_2.engine.url.database
+        dialects = [table_meta_data_for_join_1.engine.dialect.name, table_meta_data_for_join_2.engine.dialect.name]
+        table_name_1 = table_meta_data_for_join_1.table
+        table_name_2 = table_meta_data_for_join_2.table
+        
+        return render_template('joined-preview.html', db_name_1 = db_name_1, db_name_2 = db_name_2, table_name_1 = table_name_1, table_name_2 = table_name_2, db_dialects = dialects, join_attribute_1 = join_attributes[0], join_attribute_2 = join_attributes[1], table_columns = column_names, data = data)
 
 
-
-    
+@app.route('/merge', methods = ['GET', 'POST'])
+def merge_tables():
+    if not session.get('logged_in'):
+        return redirect(url_for('start'))
+    if request.method == 'GET':
+        pass
+    elif request.method == 'POST':
+        pass
     
 @app.route('/logout', methods = ['GET', 'POST'])
 def logout():
@@ -675,21 +708,27 @@ def check_validity_of_input_and_searched_value(table_name:str, input:str, cols_a
         return check_result
     
 def show_both_tables_separately(compatibility_by_code:dict):
-    db_name_1 = engine_1.url.database
-    db_name_2 = engine_2.url.database
+    db_name_1 = metadata_table_1.engine.url.database
+    db_name_2 = metadata_table_2.engine.url.database
+    db_dialects = []
+    db_dialects.append(metadata_table_1.engine.dialect.name)
+    db_dialects.append(metadata_table_2.engine.dialect.name)
+    for index, dialect in enumerate(db_dialects):
+        if dialect == 'mariadb':
+            db_dialects[index] = 'MariaDB'
+        elif dialect == 'postgresql':
+            db_dialects[index] = 'PostgreSQL'
     table_1 = metadata_table_1.table
     table_2 = metadata_table_2.table
     data_1 = get_full_table_ordered_by_primary_key(metadata_table_1.engine, metadata_table_1.table, metadata_table_1.primary_keys)
     data_2 = get_full_table_ordered_by_primary_key(metadata_table_2.engine, metadata_table_2.table, metadata_table_2.primary_keys)
     table_columns_1 = metadata_table_1.columns
     table_columns_2 = metadata_table_2.columns
-    return render_template('two-tables.html', db_name_1 = db_name_1, table_name_1 = table_1, db_name_2 = db_name_2, table_name_2 = table_2, 
+    return render_template('two-tables.html', db_name_1 = db_name_1, db_dialects = db_dialects, table_name_1 = table_1, db_name_2 = db_name_2, table_name_2 = table_2, 
                                table_columns_1 = table_columns_1, data_1 = data_1, table_columns_2 = table_columns_2, data_2 = data_2, comp_by_code = compatibility_by_code)
 
 
 if __name__ == '__main__':
     app.secret_key = os.urandom(12)
-    print(20 == 20.0)
-    print(20 == 20.04)
     serve(app, host = '0.0.0.0', port = 8000)
     

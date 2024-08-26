@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <title>SQL-Datenbanken</title>
+    {% include 'css.html' %}
+    <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+    <!--<link rel="stylesheet" href="{{ url_for('static', filename='styles/two-tables.css') }}">-->
+</head>
+
+<body>
+    <div class="compare">
+        <div class="connection">
+            <h3>Verbunden mit Datenbank {{ db_name_1 }} ({{ db_dialects[0] }}), Tabelle {{ table_name_1 }} und Datenbank
+                {{ db_name_2 }} ({{ db_dialects[1]}}), Tabelle {{ table_name_2 }}</h3>
+            <a href="{{ url_for('disconnect_from_single_db') }}"><button
+                    onclick="return confirm('Sind Sie sicher? Sie kehren dann zur Anmeldeseite zurück.')"> Verbindung
+                    trennen </button></a>
+        </div>
+        <div class="links">
+            <button id="backButton">Zurück</button>
+            <div class="tab">
+                <a href="{{ url_for('compare_two_dbs') }}" class="active">Tabellen vergleichen</a>
+                <a href="{{ url_for('merge_tables') }}">Tabellen verbinden</a>
+            </div>
+        </div>
+        <h4>Join der Tabellen {{ db_name_1 }}.{{ table_name_1 }} und {{ db_name_2 }}.{{ table_name_2 }}, verbunden über
+            {{ table_name_1 }}.{{ join_attribute_1 }} und {{ table_name_2 }}.{{ join_attribute_2 }}</h4>
+        <div id="joined-table"></div>
+
+    </div>
+    <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+    <script src="{{url_for('static', filename='showTable.js')}}"></script>
+    <script src="{{url_for('static', filename='confirmBack.js')}}"></script>
+    <script>
+        var columns = {{ table_columns | tojson | safe }};
+        var data = {{ data | tojson | safe }};
+        showTable(columns, data, 'joined-table');
+
+
+        const backButton = document.getElementById('backButton')
+        backButton.addEventListener('click', function () {
+            confirmBack();
+        });
+
+
+
+
+
+    </script>
+</body>
+
+</html>

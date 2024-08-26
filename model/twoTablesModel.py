@@ -8,7 +8,7 @@ from model.SQLDatabaseError import DialectError, QueryError
 
 
 
-def join_tables_of_same_dialect_on_same_server(table_meta_data:list[TableMetaData], attributes_to_join_on:list[dict[str:str]], attributes_to_select_1:list[str], attributes_to_select_2:list[str], full_outer_join:bool = False, cast_direction:int = None):
+def join_tables_of_same_dialect_on_same_server(table_meta_data:list[TableMetaData], attributes_to_join_on:list[str], attributes_to_select_1:list[str], attributes_to_select_2:list[str], full_outer_join:bool = False, cast_direction:int = None):
     engine_1 = table_meta_data[0].engine
     engine_2 = table_meta_data[1].engine
     dialect_1 = engine_1.dialect.name
@@ -30,14 +30,14 @@ def join_tables_of_same_dialect_on_same_server(table_meta_data:list[TableMetaDat
     if table_meta_data[0].engine.url.database != table_meta_data[1].engine.url.database:
         db_name_1 = table_meta_data[0].engine.url.database
         db_name_2 = table_meta_data[1].engine.url.database
-    attribute_to_join_on_1 = list(attributes_to_join_on[0].keys())[0]
-    attribute_to_join_on_2 = list(attributes_to_join_on[1].keys())[0]
-    join_attribute_1 = f'{table_1}.{convert_string_if_contains_capitals_or_spaces(attribute_to_join_on_1, dialect_1)}'
-    join_attribute_2 = f'{table_2}.{convert_string_if_contains_capitals_or_spaces(attribute_to_join_on_2, dialect_2)}'
+    # attribute_to_join_on_1 = list(attributes_to_join_on[0].keys())[0]
+    # attribute_to_join_on_2 = list(attributes_to_join_on[1].keys())[0]
+    join_attribute_1 = f'{table_1}.{convert_string_if_contains_capitals_or_spaces(attributes_to_join_on[0], dialect_1)}'
+    join_attribute_2 = f'{table_2}.{convert_string_if_contains_capitals_or_spaces(attributes_to_join_on[1], dialect_2)}'
     
 
-    if attribute_to_join_on_1 in attributes_to_select_1 and attribute_to_join_on_2 in attributes_to_select_2:
-        attributes_to_select_2.pop(attributes_to_select_2.index(attribute_to_join_on_2))
+    if attributes_to_join_on[0] in attributes_to_select_1 and attributes_to_join_on[1] in attributes_to_select_2:
+        attributes_to_select_2.pop(attributes_to_select_2.index(attributes_to_join_on[1]))
     delimiter = ','
     if len(attributes_to_select_1) == 0:
         delimiter = ''
@@ -52,9 +52,20 @@ def join_tables_of_same_dialect_on_same_server(table_meta_data:list[TableMetaDat
         attributes_table_2 = list_attributes_to_select(attributes_to_select_2, dialect_2, table_2, db_name_2)
         join_query = f'{join_query} {attributes_table_2}'
     
-
-    data_type_1 = attributes_to_join_on[0][attribute_to_join_on_1]
-    data_type_2 = attributes_to_join_on[1][attribute_to_join_on_2]
+    data_type_1 = table_meta_data[0].column_names_and_data_types[attributes_to_join_on[0]]['data_type']
+    data_type_2 = table_meta_data[1].column_names_and_data_types[attributes_to_join_on[1]]['data_type']
+    data_type_group_1 = table_meta_data[0].column_names_and_data_types[attributes_to_join_on[0]]['data_type_group']
+    data_type_group_2 = table_meta_data[1].column_names_and_data_types[attributes_to_join_on[1]]['data_type_group']
+    # data_type_1 = attributes_to_join_on[0][attribute_to_join_on_1]
+    # data_type_2 = attributes_to_join_on[1][attribute_to_join_on_2]
+    # if cast_direction == None:
+    #     if data_type_group_1 == 0:
+    #         if data_type_group_2 > 0:
+    #             cast_direction = 2
+    #     elif data_type_group_1 == 1:
+    #         if data_type_group_2 == 0:
+    #             cast_direction = 1
+    #         elif data_type_group_2 == 2
     if cast_direction != None:
         if cast_direction == 1:
             join_attribute_1 = f'CAST ({join_attribute_1} AS {data_type_2})'
@@ -122,9 +133,12 @@ def join_tables_of_different_dialects(table_meta_data:list[TableMetaData], attri
         result = execute_sql_query(engine, text(query))
         result_columns.append(list(result.keys()))
         results[tables[index]] = convert_result_to_list_of_lists(result)
-       
-    data_type_1 = attributes_to_join_on[0][join_attributes[0]] 
-    data_type_2 = attributes_to_join_on[1][join_attributes[1]] 
+
+    data_type_1 = table_meta_data_1.column_names_and_data_types[attributes_to_join_on[0]]['data_type']
+    data_type_2 = table_meta_data_2.column_names_and_data_types[attributes_to_join_on[1]]['data_type']
+    
+    # data_type_1 = attributes_to_join_on[0][join_attributes[0]] 
+    # data_type_2 = attributes_to_join_on[1][join_attributes[1]] 
     join_attribute_index_1 = result_columns[0].index(join_attributes[0])
     join_attribute_index_2 = result_columns[1].index(join_attributes[1])
     joined_table = []
@@ -184,10 +198,12 @@ def join_tables_of_different_dialects(table_meta_data:list[TableMetaData], attri
     column_names_for_display = [table_1 + '.' + col_1 for col_1 in result_columns[0]] + [table_2 + '.' + col_2 for col_2 in result_columns[1]]
     return joined_table, column_names_for_display
 
+def merge_two_tables(target_table_data:TableMetaData, source_table_data:TableMetaData, attributes_to_join_on:list[str], columns_to_insert:list[str], commit:bool = None):
+    attributes_to_select = target_table_data.columns
+    return None
 
 
-
-def check_arguments_for_joining(table_meta_data:list[TableMetaData], attributes_to_join_on:list[dict[str:str]], attributes_to_select_1:list[str], attributes_to_select_2:list[str], cast_direction:int = None):
+def check_arguments_for_joining(table_meta_data:list[TableMetaData], attributes_to_join_on:list[str], attributes_to_select_1:list[str], attributes_to_select_2:list[str], cast_direction:int = None):
     engine_1 = table_meta_data[0].engine
     engine_2 = table_meta_data[1].engine
     dialect_1 = engine_1.dialect.name
@@ -231,7 +247,7 @@ def check_data_type_meta_data(engines:list[Engine], table_names:list[str]):
         print(query)
         # für PostgreSQL fehlt noch die Angabe, ob es sich um einen Primärschlüssel oder ein Attribut mit Unique-Constraint handelt
         if engine.dialect.name == 'postgresql':
-            constraint_query = f"SELECT i.table_name, a.attnameFROM pg_constraint con JOIN pg_attribute a ON a.attnum = ANY(con.conkey) JOIN information_schema.columns i ON a.attname = i.column_name AND"
+            constraint_query = f"SELECT i.table_name, a.attname FROM pg_constraint con JOIN pg_attribute a ON a.attnum = ANY(con.conkey) JOIN information_schema.columns i ON a.attname = i.column_name AND"
             if len(engines) == 1:
                 table_name_1 = convert_string_if_contains_capitals_or_spaces(table_names[0], engine.dialect.name)
                 table_name_2 = convert_string_if_contains_capitals_or_spaces(table_names[1], engine.dialect.name)

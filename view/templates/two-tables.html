@@ -9,22 +9,29 @@
 </head>
 
 <body>
-    <div class="search">
+    <div class="compare">
         <div class="connection">
-            <h3>Verbunden mit Datenbank {{ db_name_1 }}, Tabelle {{ table_name_1 }} und Datenbank {{ db_name_2 }},
-                Tabelle {{ table_name_2 }}</h3>
+            <h3>Verbunden mit Datenbank {{ db_name_1 }} ({{ db_dialects[0] }}), Tabelle {{ table_name_1 }} und Datenbank
+                {{
+                db_name_2 }} ({{ db_dialects[1]}}), Tabelle {{ table_name_2 }}</h3>
             <a href="{{ url_for('disconnect_from_single_db') }}"><button
                     onclick="return confirm('Sind Sie sicher? Sie kehren dann zur Anmeldeseite zurück.')"> Verbindung
                     trennen </button></a>
         </div>
-
-        <div class="tab">
-            <a href="{{ url_for('search_entries') }}" class="active">Suchen</a>
-            <a href="{{ url_for('search_and_replace_entries') }}">Suchen und Ersetzen</a>
-            <a href="{{ url_for('unify_db_entries') }}">Vereinheitlichen</a>
+        <div class="links">
+            <button id="backButton">Zurück</button>
+            <div class="tab">
+                <a href="{{ url_for('compare_two_dbs') }}" class="active">Tabellen vergleichen</a>
+                <a href="{{ url_for('search_and_replace_entries') }}">Tabellen verbinden</a>
+            </div>
         </div>
         <div class="selection">
             <form action="/compare" method="POST">
+                <label for="table-selection">Zieltabelle des Joins</label>
+                <select name="table-selection" required>
+                    <option value="table_1" name="table_1">{{ db_name_1 + '.' + table_name_1 }}</option>
+                    <option value="table_2" name="table_2">{{ db_name_2 + '.' + table_name_2 }}</option>
+                </select>
                 <label for="attribute-selection">Verbinden über:</label>
                 <select name="attribute-selection" id="attribute-selection" required>
                     {% for key, val in comp_by_code|dictsort %}
@@ -42,7 +49,9 @@
                     <optgroup label="Typkonversion nötig und ggf. uneindeutige Werte">
                         {% endif %}
                         {% for value in comp_by_code[key] %}
-                        <option value="{{ value }}" name="{{ value }}">{{ db_name_1 + '.' + value[0] }}, {{ db_name_2 +
+                        <option value="{{ value[0] }}, {{ value[1] }}" name="{{ value[0] }}, {{ value[1] }}">{{
+                            db_name_1 + '.' + value[0]
+                            }}, {{ db_name_2 +
                             '.' + value[1] }}
                         </option>
                         {% endfor %}
@@ -137,6 +146,17 @@
         showTable(columns2, data2, 'table2');
         {% endif %}
 
+        function confirmBack() {
+            var result = confirm('Sind Sie sicher, dass Sie zur vorigen Seite zurückkehren wollen?');
+            if (result) {
+                window.history.back();
+            }
+        }
+
+        const backButton = document.getElementById('backButton')
+        backButton.addEventListener('click', function () {
+            confirmBack();
+        });
 
         function unSelectAll(source, className) {
             var checkboxes = document.querySelectorAll(className);

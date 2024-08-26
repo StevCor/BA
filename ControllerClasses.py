@@ -1,3 +1,4 @@
+import copy
 from sqlalchemy import Engine
 
 from model.databaseModel import get_column_names_data_types_and_max_length, get_primary_key_from_engine
@@ -15,3 +16,12 @@ class TableMetaData:
 
         self.column_names_and_data_types = column_names_and_data_types
         self.total_row_count = row_count
+
+    def __copy__(self):
+        return copy.copy(self)
+    
+    def get_data_type(self, column_name):
+        return self.column_names_and_data_types[column_name]['data_type']
+    
+    def get_data_type_group(self, column_name):
+        return self.column_names_and_data_types[column_name]['data_type_group']
