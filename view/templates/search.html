@@ -88,8 +88,8 @@
         </div>
         <form action="{{ '/search' }}" method="POST">
             <div class=searchbar>
-                <label for="columntosearch">Spalte auswählen:</label>
-                <select name="columntosearch" id="columntosearch" required>
+                <label for="column-to-search">Spalte auswählen:</label>
+                <select name="column-to-search" id="column-to-search" required>
                     <option value="all">Alle Spalten</option>
                     {% for column in table_columns %}
                     {% if column == searched_column %}
@@ -99,8 +99,8 @@
                     {% endif %}
                     {% endfor %}
                 </select>
-                <label for="searchstring">Suchen:</label>
-                <input type="text" id="searchstring" name="searchstring" value="{{ searched_string }}">
+                <label for="search-string">Suchen:</label>
+                <input type="text" id="search-string" name="search-string" value="{{ searched_string }}">
             </div>
             {# <input type="hidden" id="engineno" name="engineno" value="{{ engine_no }}"> #}
             <input type="hidden" id="tablename" name="tablename" value="{{ table_name }}">

@@ -24,7 +24,8 @@
                         <label for="db-name1">Datenbank:</label>
                     </div>
                     <div class="col-75">
-                        <input type="text" id="db-name1" placeholder="Datenbankname" name="db-name1" required>
+                        <input type="text" id="db-name1" placeholder="Datenbankname" name="db-name1" {% if engine_no==2
+                            %} value="{{ engine_1.url.database}}" {% endif %} required>
                     </div>
                 </div>
                 <div class="row">
@@ -34,8 +35,10 @@
                     <div class="col-75">
 
                         <select class="db-dialect" name="db-dialect1" id="db-dialect1" required>
-                            <option value="mariadb">MariaDB</option>
-                            <option value="postgresql">PostgreSQL</option>
+                            <option value="mariadb" {% if engine_no==2 and engine_1.dialect.name=='mariadb' %} selected
+                                {% endif %}>MariaDB</option>
+                            <option value="postgresql" {% if engine_no==2 and engine_1.dialect.name=='postgresql' %}
+                                selected {% endif %}>PostgreSQL</option>
                         </select>
 
                     </div>
@@ -45,8 +48,8 @@
                         <label for="user-name1">Benutzername:</label>
                     </div>
                     <div class="col-75">
-                        <input type="text" name="user-name1" placeholder="Datenbankbenutzername" id="user-name1"
-                            required>
+                        <input type="text" name="user-name1" placeholder="Datenbankbenutzername" id="user-name1" {% if
+                            engine_no==2 %} value="{{ engine_1.url.username }}" {% endif %} required>
                     </div>
                 </div>
                 <div class="row">
@@ -54,7 +57,8 @@
                         <label for="password1">Passwort:</label>
                     </div>
                     <div class="col-75">
-                        <input type="password" name="password1" placeholder="Datenbankpasswort" id="password1" required>
+                        <input type="password" name="password1" placeholder="Datenbankpasswort" id="password1" {% if
+                            engine_no==2 %} value="{{ engine_1.url.password }}" {% endif %} required>
                     </div>
                 </div>
                 <div class="row">

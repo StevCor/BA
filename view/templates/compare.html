@@ -27,8 +27,8 @@
         </div>
         <div class="selection">
             <form action="/compare" method="POST">
-                <label for="table-selection">Zieltabelle des Joins</label>
-                <select name="table-selection" required>
+                <label for="target-table">Zieltabelle des Joins</label>
+                <select name="target-table" required>
                     <option value="table_1" name="table_1">{{ db_name_1 + '.' + table_name_1 }}</option>
                     <option value="table_2" name="table_2">{{ db_name_2 + '.' + table_name_2 }}</option>
                 </select>
@@ -58,8 +58,15 @@
                     </optgroup>
                     {% endfor %}
                 </select>
-                <input type="checkbox" name="cast" id="cast" value="cast">
-                <label for="cast">Typkonversion erzwingen</label><br>
+                <div class="cast-selection">
+                    Typkonversion erzwingen:
+                    <input type="radio" id="none" name="cast" value=0 checked required>
+                    <label for="none">Keine</label>
+                    <input type="radio" id="attribute1" name="cast" value=1 required>
+                    <label for="attribute1">für {{ db_name_1 }}.{{ table_name_1 }}</label>
+                    <input type="radio" id="attribute2" name="cast" value=2 required>
+                    <label for="attribute2">für {{ db_name_2 }}.{{ table_name_2 }}</label>
+                </div>
 
                 <h4>Attribute, die für den Vergleich beibehalten werden sollen:</h4>
                 Tabelle {{ table_name_1}}:

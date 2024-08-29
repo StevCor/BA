@@ -18,7 +18,9 @@
 </head>
 
 <body>
+
     <div class="selecttable">
+        {% include 'message.html' %}
         <h1>Auswahl der Tabellen aus der aktiven Datenbank {{ db_name }}</h1>
         {% if engine_no == 1 %}
         <h3>Bitte wählen Sie bis zu zwei Tabellen der Datenbank {{ db_name }} aus, um mit diesen zu arbeiten:</h3>

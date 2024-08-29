@@ -1,20 +1,22 @@
-from flask import Flask, render_template, request, flash, redirect, session, abort, url_for, jsonify
+import datetime
+from flask import Flask, render_template, request, flash, redirect, session, url_for
 import os
 import re
-from sqlalchemy import Engine
 from waitress import serve
 from ControllerClasses import TableMetaData
+from controllerFunctions import check_validity_of_input_and_searched_value
 from model.SQLDatabaseError import DatabaseError, DialectError
 from model.loginModel import register_new_user, login_user 
-from model.databaseModel import connect_to_db, get_column_names_data_types_and_max_length, get_primary_key_from_engine, list_all_tables_in_db_with_preview, search_string, get_row_count_from_engine, get_full_table, get_full_table_ordered_by_primary_key, get_unique_values_for_attribute, get_replacement_information, get_row_number_of_affected_entries, check_data_type_and_constraint_compatibility, replace_all_string_occurrences, replace_some_string_occurrences, update_to_unify_entries
-from model.twoTablesModel import check_basic_data_type_compatibility, join_tables_of_different_dialects, join_tables_of_same_dialect_on_same_server
+from model.databaseModel import check_data_type_meta_data, connect_to_db, get_column_names_data_types_and_max_length, get_primary_key_from_engine, get_row_count_from_engine, list_all_tables_in_db_with_preview, get_full_table_ordered_by_primary_key
+from model.oneTableModel import get_replacement_information, get_row_number_of_affected_entries, get_unique_values_for_attribute, replace_all_string_occurrences, replace_some_string_occurrences, search_string, update_to_unify_entries
+from model.twoTablesModel import check_basic_data_type_compatibility, join_tables_of_different_dialects_dbs_or_servers, join_tables_of_same_dialect_on_same_server
 
 global engine_1
 global engine_2
 global db_in_use
 global tables_in_use
-global metadata_table_1
-global metadata_table_2
+global meta_data_table_1
+global meta_data_table_2
 global replacement_occurrence_dict
 global replacement_data_dict
 global basic_compatibility_list
@@ -38,6 +40,8 @@ def start():
 
 @app.route('/login', methods=['POST', 'GET'])
 def check_login():
+    if session.get('logged_in'):
+        return redirect(url_for('show_db_login_page', engine_no = 1))
     message = 'Bitte loggen Sie sich ein, um das Tool zu nutzen.'
     if request.method == 'POST':
         result = login_user(request.form['username'], request.form['password'])
@@ -70,14 +74,14 @@ def show_db_login_page(engine_no):
                     sql_dialect = 'PostgreSQL'
                 else:
                     raise DialectError(f'Der SQL-Dialekt {engine_1.dialect.name} wird nicht unterstützt.')
-                message = f'Tabelle {metadata_table_1.table} der Datenbank {engine_1.url.database} ({sql_dialect}) ausgewählt.'
+                message = f'Tabelle {meta_data_table_1.table_name} der Datenbank {engine_1.url.database} ({sql_dialect}) ausgewählt.'
             else:
                 message = ''
-            return render_template('db-connect.html', username = session['username'], engine_no = engine_no, message = message)
+            return render_template('db-connect.html', username = session['username'], engine_no = engine_no, engine_1 = engine_1, message = message)
         
-@app.route('/connect-to-db', methods = ['POST'])
+@app.route('/connect-to-db', methods = ['GET', 'POST'])
 def set_up_db_connection():
-    if not session.get('logged_in'):
+    if not session.get('logged_in') or request.method == 'GET':
         return redirect(url_for('start'))
     elif request.method == 'POST':
         if 'db-one' in request.form.keys():
@@ -131,6 +135,7 @@ def select_tables_for_engine(engine_no:int):
         tables, previews = list_all_tables_in_db_with_preview(engine)
         db_name = engine.url.database
         message = f'Verbindung zur Datenbank {db_name} aufgebaut.'
+        flash(message)
         return render_template('tables.html', engine_no = engine_no, db_name = db_name, tables = tables, previews = previews, tables_in_use = tables_in_use, message = message)
 
         
@@ -140,8 +145,8 @@ def select_tables():
         return redirect(url_for('start'))
     print(request)
     global tables_in_use
-    global metadata_table_1
-    global metadata_table_2
+    global meta_data_table_1
+    global meta_data_table_2
     engine_no = int(request.form['engine-no'])
     engine = None
     table_names = request.form.getlist('selected-table')
@@ -150,25 +155,29 @@ def select_tables():
     elif engine_no == 2:
         engine = engine_2
     for table_name in table_names:
-        count = get_row_count_from_engine(engine, table_name)
+        primary_keys = get_primary_key_from_engine(engine, table_name)
+        data_type_info = check_data_type_meta_data(engine, table_name)
+        column_names_and_data_types = get_column_names_data_types_and_max_length(engine, table_name)
+        total_row_count = get_row_count_from_engine(engine, table_name)
         if tables_in_use == 0:
             tables_in_use += 1
-            metadata_table_1 = TableMetaData(engine, table_name, count)
-            columns = metadata_table_1.columns
+            meta_data_table_1 = TableMetaData(engine, table_name, primary_keys, data_type_info, column_names_and_data_types, total_row_count)
+            columns = meta_data_table_1.columns
         elif tables_in_use == 1:
             tables_in_use += 2
-            metadata_table_2 = TableMetaData(engine, table_name, count)
-            columns = metadata_table_2.columns
+            meta_data_table_2 = TableMetaData(engine, table_name, primary_keys, data_type_info, column_names_and_data_types, total_row_count)
+            columns = meta_data_table_2.columns
         else:
             message = 'Sie haben bereits zwei Tabellen ausgewählt.'
             return redirect(url_for('compare_two_dbs'))
             
     if tables_in_use == 1:
         if 'second-db-checkbox' in request.form.keys():
-            message = f'Tabelle {metadata_table_1.table} aus der Datenbank {engine.url.database} ausgewählt.'
+            message = f'Tabelle {meta_data_table_1.table_name} aus der Datenbank {engine.url.database} ausgewählt.'
+            flash(message)
             return redirect(url_for('show_db_login_page', engine_no = 2))
         else:
-            data = get_full_table_ordered_by_primary_key(engine, table_name, metadata_table_1.primary_keys)
+            data = get_full_table_ordered_by_primary_key(meta_data_table_1)
             #TODO: replace with search.html
             return render_template('one-table.html', table_name = table_name, table_columns = columns, data = data)  
     elif tables_in_use == 3:
@@ -219,24 +228,24 @@ def search_entries():
     if not session.get('logged_in'):
         return redirect(url_for('start'))
     db_name = engine_1.url.database
-    table_name = metadata_table_1.table
-    table_columns = metadata_table_1.columns
+    table_name = meta_data_table_1.table_name
+    table_columns = meta_data_table_1.columns
     searched_string = ''
+    full_table = get_full_table_ordered_by_primary_key(meta_data_table_1)
     data = []
     if request.method == 'GET':
-        data = get_full_table(engine_1, table_name)
+        data = full_table
     elif request.method == 'POST':
-        column_name = request.form['columntosearch']
-        column_names_and_data_types = dict()
+        column_name = request.form['column-to-search']
         if column_name == 'all':
-            column_names_and_data_types = metadata_table_1.column_names_and_data_types
+            column_names = meta_data_table_1.columns
         else:
-            column_names_and_data_types = {column_name: metadata_table_1.column_names_and_data_types[column_name]}
-        string_to_search = request.form['searchstring']
-        if string_to_search.strip() == '':
-            data = get_full_table(engine_1, table_name)
+            column_names = [column_name]
+        string_to_search = request.form['search-string']
+        if string_to_search == '':
+            data = full_table
         else:
-            data = search_string(engine_1, table_name, column_names_and_data_types, string_to_search)
+            data = search_string(meta_data_table_1, string_to_search, column_names)
         searched_string = string_to_search
     return render_template('search.html', db_name = db_name, table_name = table_name, searched_string = searched_string, table_columns = table_columns, data = data)
 
@@ -245,18 +254,17 @@ def search_and_replace_entries():
     if not session.get('logged_in'):
         return redirect(url_for('start'))
     db_name = engine_1.url.database
-    table_name = metadata_table_1.table
-    table_columns = metadata_table_1.columns
-    primary_keys = metadata_table_1.primary_keys
+    table_name = meta_data_table_1.table_name
+    table_columns = meta_data_table_1.columns
+    primary_keys = meta_data_table_1.primary_keys
     if request.method == 'GET':
-        data = get_full_table_ordered_by_primary_key(engine_1, table_name, primary_keys)
+        data = get_full_table_ordered_by_primary_key(meta_data_table_1)
         return render_template('replace.html', db_name = db_name, table_name = table_name, table_columns = table_columns, data = data)
     elif request.method == 'POST':
         string_to_replace = request.form['string-to-replace']
         replacement_string = request.form['replacement-string']
         column_names = request.form['affected-attributes'].removeprefix('[').removesuffix(']').replace('\'', '').split(', ')
         print('Spalten: ', column_names)
-        cols_and_dtypes = metadata_table_1.column_names_and_data_types
         affected_occurrences = request.form.getlist('selection')
         global replacement_occurrence_dict
         total_occurrences = len(replacement_occurrence_dict)
@@ -268,20 +276,20 @@ def search_and_replace_entries():
         print(len(occurrences_to_change))
         if len(occurrences_to_change) == total_occurrences:
             try:
-                data = replace_all_string_occurrences(engine_1, table_name, column_names, cols_and_dtypes, string_to_replace, replacement_string, commit=True)
+                data = replace_all_string_occurrences(meta_data_table_1, column_names, string_to_replace, replacement_string, commit=True)
             except Exception as error:
                 message = str(error)
             else:
                 message = f'Alle {total_occurrences} Ersetzungen wurden erfolgreich vorgenommen.'
         elif len(occurrences_to_change) == 0:
-            data = get_full_table_ordered_by_primary_key(engine_1, table_name, primary_keys)
+            data = get_full_table_ordered_by_primary_key(meta_data_table_1)
             message = 'Es wurden keine Einträge ausgewählt, daher wurde nichts verändert.'
         else:
             # Einfügen der Primärschlüsselattribute in das Dictionary der einzufügenden Werte, damit diese an die Funktion replace_some_string_occurrences
             # übergeben werden können. Der Zähler für die Vorkommen des gesuchten Wertes beginnt bei 1.
-            occurrences_to_change[0] = {'primary_keys': metadata_table_1.primary_keys}
-            message = replace_some_string_occurrences(engine_1, table_name, cols_and_dtypes, occurrences_to_change, string_to_replace, replacement_string, commit=True)
-            data = get_full_table_ordered_by_primary_key(engine_1, table_name, primary_keys)
+            occurrences_to_change[0] = {'primary_keys': meta_data_table_1.primary_keys}
+            message = replace_some_string_occurrences(meta_data_table_1, occurrences_to_change, string_to_replace, replacement_string, commit=True)
+            data = get_full_table_ordered_by_primary_key(meta_data_table_1)
         replacement_occurrence_dict = None
         return render_template('replace.html', db_name = db_name, table_name = table_name, table_columns = table_columns, data = data, message = message)
 
@@ -290,12 +298,12 @@ def select_entries_to_update():
     if not session.get('logged_in'):
         return redirect(url_for('start'))
     db_name = engine_1.url.database
-    table_name = metadata_table_1.table
-    table_columns = metadata_table_1.columns
-    primary_keys = metadata_table_1.primary_keys
+    table_name = meta_data_table_1.table_name
+    table_columns = meta_data_table_1.columns
+    primary_keys = meta_data_table_1.primary_keys
     # /replace-preview kann nicht über GET-Requests aufgerufen werden
     if request.method == 'GET':
-        data = get_full_table_ordered_by_primary_key(engine_1, table_name, primary_keys, convert=False)
+        data = get_full_table_ordered_by_primary_key(meta_data_table_1, convert=False)
         return render_template('replace.html', db_name = db_name, table_name = table_name, table_columns = table_columns, data = data)
     elif request.method == 'POST':
         # neu einzusetzender String
@@ -305,7 +313,7 @@ def select_entries_to_update():
         # zu ersetzender String
         string_to_search = request.form['searchstring']
         # Primärschlüssel der Tabelle
-        primary_keys = metadata_table_1.primary_keys
+        primary_keys = meta_data_table_1.primary_keys
         # Anlegen der Liste der betroffenen Attribute für die Übergabe an das Model
         affected_attributes = []
         # Anlegen einer Liste, mit der die Kompatibilität des Inputs mit den Datentypen der Spalten überprüft wird
@@ -346,7 +354,7 @@ def select_entries_to_update():
             if attribute:
                 # ... überprüft, ob der im Browser eingegebene String als der entsprechende Datentyp (int oder float) interpretiert werden kann
                 # bzw. die maximale Zeichenanzahl nicht überschreitet, wenn es sich um einen textbasierten Datentyp handelt.
-                validity = check_validity_of_input_and_searched_value(table_name, input, cols_dtypes_and_num_types, table_columns[index], string_to_search)
+                validity = check_validity_of_input_and_searched_value(meta_data_table_1, input, table_columns[index], string_to_search)
                 # Ist die Überprüfung bestanden, gibt die Funktion einene leeren String aus, bei Fehlern eine entsprechende Meldung.
                 # Wenn eine Fehlermeldung besteht ...
                 print('Überprüfung ergibt:', validity)
@@ -359,7 +367,7 @@ def select_entries_to_update():
                     attribute_to_ignore = table_columns[index]
                     affected_attributes.remove(attribute_to_ignore)
         # Volle Tabelle vor der Änderung
-        unchanged_data = get_full_table_ordered_by_primary_key(engine_1, table_name, primary_keys)
+        unchanged_data = get_full_table_ordered_by_primary_key(meta_data_table_1)
         # Wenn nach dem Durchlaufen dieser Schleife nur Nullen in dieser Liste stehen, ist der eingegebene Wert mit keinem der zu durchsuchenden
         # Attribute kompatibel oder in den kompatiblen Spalten wurden keine passenden Einträge gefunden, ...
         print(attribute_list)
@@ -402,7 +410,7 @@ def select_entries_to_update():
         # replacement_data_dict) sowie je betroffener Tabellenzelle (Zeilennumer, Primärschlüssel, Spaltenname in replacement_occurrence_dict)
         # aus der Datenbank zu beziehen.
         try:
-            replacement_data_dict, replacement_occurrence_dict = get_replacement_information(engine_1, table_name, attributes_and_positions, cols_dtypes_and_num_types, primary_keys, string_to_search, input) 
+            replacement_data_dict, replacement_occurrence_dict = get_replacement_information(meta_data_table_1, attributes_and_positions, string_to_search, input) 
         # Falls dabei Fehler auftreten, ...
         except Exception as error:
             # raise error
@@ -422,7 +430,32 @@ def select_entries_to_update():
                 return render_template('replace-preview.html', db_name = db_name, table_name = table_name, occurrence_dict = replacement_occurrence_dict, table_columns = table_columns, string_to_replace = string_to_search, replacement_string = input, replacement_data_dict = replacement_data_dict, affected_attributes = affected_attributes, message = message)
 
 
-      
+@app.route('/unify', methods = ['GET', 'POST'])
+def unify_db_entries():
+    if not session.get('logged_in'):
+        return redirect(url_for('start'))
+    db_name = engine_1.url.database
+    table_name = meta_data_table_1.table_name
+    table_columns = meta_data_table_1.columns
+    primary_keys = meta_data_table_1.primary_keys
+    message = ''
+    for item in request.args:
+        print(item)
+    if request.method == 'GET':
+        data = get_full_table_ordered_by_primary_key(meta_data_table_1)
+    elif request.method == 'POST':
+        attribute_to_change = request.form['columntounify']
+        # \ wird beim Auslesen zu \\ -> muss rückgängig gemacht werden, weil Parameter zweimal an HTML-Dokumente gesendet wird
+        old_values = request.form['old-values'].replace('[', '').replace(']', '').replace('\'', '').replace('\\\\', '\\').split(', ')
+        new_value = request.form['new-value']
+        message = 'Änderungen erfolgreich durchgeführt.'
+        try:
+            update_to_unify_entries(meta_data_table_1, attribute_to_change, old_values, new_value, True)
+        except Exception as error:
+            message = str(error)
+        data = get_full_table_ordered_by_primary_key(meta_data_table_1)
+    return render_template('unify.html', db_name = db_name, table_columns = table_columns, primary_keys = primary_keys, data = data, table_name = table_name, engine_no = 1, message = message)
+     
         
 
 @app.route('/unify-selection', methods = ['GET', 'POST'])
@@ -433,9 +466,9 @@ def select_entries_to_unify():
         return redirect(url_for('unify_db_entries'), code = 302)
     elif request.method == 'POST':
         db_name = engine_1.url.database
-        table_name = request.form['tablename']
-        column_to_unify = request.form['columntounify']
-        data = get_unique_values_for_attribute(engine_1, table_name, column_to_unify)
+        table_name = request.form['table-name']
+        column_to_unify = request.form['column-to-unify']
+        data = get_unique_values_for_attribute(meta_data_table_1, column_to_unify)
         return render_template('unify-selection.html', db_name = db_name, table_name = table_name, column_to_unify = column_to_unify, data = data, engine_no = 1)
 
 @app.route('/unify-preview', methods = ['GET', 'POST'])
@@ -447,10 +480,10 @@ def show_affected_entries():
     elif request.method == 'POST':
         print(request)
         db_name = engine_1.url.database
-        table_name = metadata_table_1.table
-        table_columns = metadata_table_1.columns
-        cols_and_dtypes = metadata_table_1.column_names_and_data_types
-        column_to_unify = request.form['columntounify']
+        table_name = meta_data_table_1.table_name
+        table_columns = meta_data_table_1.columns
+        cols_and_dtypes = meta_data_table_1.column_names_and_data_types
+        column_to_unify = request.form['column-to-unify']
         print(column_to_unify)
         new_value = request.form['replacement']
         old_values = list()
@@ -458,15 +491,16 @@ def show_affected_entries():
             if re.match(r'^[0-9]+$', key):
                 old_values.append(request.form[key])
         print(old_values)
+        unique_values = get_unique_values_for_attribute(meta_data_table_1, column_to_unify)
         if len(old_values) < 1:
-            data = get_unique_values_for_attribute(engine_1, table_name, column_to_unify)
+            data = unique_values
             message = 'Bitte wählen Sie mindestens ein zu bearbeitendes Attribut aus und versuchen Sie es erneut.'
             return render_template('unify-selection.html', db_name = db_name, table_name = table_name, column_to_unify = column_to_unify, data = data, engine_no = 1, message = message)
         message = ''
-        validity = check_validity_of_input_and_searched_value(table_name, new_value, cols_and_dtypes, column_to_unify, old_values[0])
+        validity = check_validity_of_input_and_searched_value(meta_data_table_1, new_value, column_to_unify, old_values[0])
         print(validity)
         if validity != 0:
-            data = get_unique_values_for_attribute(engine_1, table_name, column_to_unify)
+            data = unique_values
             if validity == 1:
                 message = f"Der eingegebene neue Wert \'{new_value}\' ist nicht mit dem Datentyp {cols_and_dtypes[column_to_unify]['data_type']} des Attributs {column_to_unify} kompatibel."
             elif validity == 3:
@@ -481,23 +515,22 @@ def show_affected_entries():
             return render_template('unify-selection.html', db_name = db_name, table_name = table_name, column_to_unify = column_to_unify, data = data, engine_no = 1, message = message)
         else:
             try:
-                update_to_unify_entries(engine_1, table_name, column_to_unify, old_values, new_value, False)
+                update_to_unify_entries(meta_data_table_1, column_to_unify, old_values, new_value, False)
             except Exception as error:
                 message = str(error)
                 if 'constraint' in message.lower():
                     message = 'Der eingegebene neue Wert verletzt eine Bedingung (Constraint) Ihrer Datenbank. Bitte versuchen Sie es erneut.'
-                data = get_unique_values_for_attribute(engine_1, table_name, column_to_unify)
+                data = unique_values
                 return render_template('unify-selection.html', db_name = db_name, table_name = table_name, column_to_unify = column_to_unify, data = data, engine_no = 1, message = message)
         
         index_of_affected_attribute = 0
-        primary_keys = metadata_table_1.primary_keys
         
-        data = get_full_table_ordered_by_primary_key(engine_1, table_name, primary_keys)
-        affected_entries = get_row_number_of_affected_entries(engine_1, table_name, cols_and_dtypes, [column_to_unify], metadata_table_1.primary_keys, old_values, mode = 'unify')
+        data = get_full_table_ordered_by_primary_key(meta_data_table_1)
+        affected_entries = get_row_number_of_affected_entries(meta_data_table_1, [column_to_unify], old_values, mode = 'unify')
         affected_rows = []
         for row in affected_entries:
             affected_rows.append(row[0])
-        row_total = metadata_table_1.total_row_count
+        row_total = meta_data_table_1.total_row_count
         for index, column in enumerate(table_columns):
             if column == column_to_unify:
                 index_of_affected_attribute = index + 1
@@ -505,31 +538,6 @@ def show_affected_entries():
         
         return render_template('unify-preview.html', db_name = db_name, table_name = table_name, table_columns = table_columns, column_to_unify = column_to_unify, old_values = old_values, new_value = new_value, data = data, index_of_affected_attribute = index_of_affected_attribute, affected_rows = affected_rows, row_total = row_total)
 
-@app.route('/unify', methods = ['GET', 'POST'])
-def unify_db_entries():
-    if not session.get('logged_in'):
-        return redirect(url_for('start'))
-    db_name = engine_1.url.database
-    table_name = metadata_table_1.table
-    table_columns = metadata_table_1.columns
-    primary_keys = metadata_table_1.primary_keys
-    message = ''
-    for item in request.args:
-        print(item)
-    if request.method == 'GET':
-        data = get_full_table(engine_1, table_name)
-    elif request.method == 'POST':
-        attribute_to_change = request.form['columntounify']
-        # \ wird beim Auslesen zu \\ -> muss rückgängig gemacht werden, weil Parameter zweimal an HTML-Dokumente gesendet wird
-        old_values = request.form['oldvalues'].replace('[', '').replace(']', '').replace('\'', '').replace('\\\\', '\\').split(', ')
-        new_value = request.form['newvalue']
-        message = 'Änderungen erfolgreich durchgeführt.'
-        try:
-            update_to_unify_entries(engine_1, table_name, attribute_to_change, old_values, new_value, True)
-        except Exception as error:
-            message = str(error)
-        data = get_full_table(engine_1, table_name)
-    return render_template('unify.html', db_name = db_name, table_columns = table_columns, primary_keys = primary_keys, data = data, table_name = table_name, engine_no = 1, message = message)
 
 @app.route('/disconnect')
 def disconnect_from_single_db():
@@ -538,12 +546,12 @@ def disconnect_from_single_db():
     global engine_1
     global db_in_use
     global tables_in_use
-    global metadata_table_1
+    global meta_data_table_1
 
     engine_1 = None
     db_in_use = 0
     tables_in_use = 0
-    metadata_table_1 = None
+    meta_data_table_1 = None
     
     return redirect(url_for('show_db_login_page', engine_no = 1))
 
@@ -554,61 +562,64 @@ def compare_two_dbs():
         return redirect(url_for('start'))
     if request.method == 'GET':
         global basic_compatibility_list
-        global data_type_information
-        basic_compatibility_list, compatibility_by_code, data_type_information = check_basic_data_type_compatibility(metadata_table_1, metadata_table_2, True)
+        basic_compatibility_list, compatibility_by_code = check_basic_data_type_compatibility(meta_data_table_1, meta_data_table_2, True)
         return show_both_tables_separately(compatibility_by_code)
     elif request.method == 'POST':
-        target_table = request.form['table-selection']
+        target_table = request.form['target-table']
         join_attribute_string = request.form['attribute-selection'] #.removeprefix('(').removesuffix(')').replace("\'", '')
+        cast_direction = request.form['cast']
         join_attributes = join_attribute_string.split(', ')
-        print('JOIN ON: ', join_attributes)
-        print('wtf', join_attribute_string)
         table_meta_data_for_join_1 = None
         table_meta_data_for_join_2 = None
         selected_columns_table_1 = []
         selected_columns_table_2 = [] 
         attributes_to_join_on = []
         if target_table != 'table_1':
-            table_meta_data_for_join_1 = metadata_table_2.copy()
-            table_meta_data_for_join_2 = metadata_table_1.copy()
+            table_meta_data_for_join_1 = meta_data_table_2
+            table_meta_data_for_join_2 = meta_data_table_1
             selected_columns_table_1 = request.form.getlist('columns-table2')
             selected_columns_table_2 =  request.form.getlist('columns-table1')
             helper_attribute = join_attributes[0]
             join_attributes[0] = join_attributes[1]
-            join_attributes[1] = helper_attribute            
+            join_attributes[1] = helper_attribute 
+            if cast_direction == 1:
+                cast_direction = 2
+            elif cast_direction == 2:
+                cast_direction = 1
+
         else:
-            table_meta_data_for_join_1 = metadata_table_1
-            table_meta_data_for_join_2 = metadata_table_2
+            table_meta_data_for_join_1 = meta_data_table_1
+            table_meta_data_for_join_2 = meta_data_table_2
             selected_columns_table_1 =  request.form.getlist('columns-table1')
             selected_columns_table_2 = request.form.getlist('columns-table2')
         meta_data_list = [table_meta_data_for_join_1, table_meta_data_for_join_2]
-        cast = False
-        
-        
-        if 'cast' in request.form.keys():
-            cast = True
-        for index, attribute in enumerate(join_attributes):
-            data_type = meta_data_list[index].column_names_and_data_types[attribute]['data_type']
-            attributes_to_join_on.append({attribute: data_type})
-        if table_meta_data_for_join_1.engine.dialect.name == table_meta_data_for_join_2.engine.dialect.name:
+                
+        cast_direction = int(request.form.get('cast'))
+        for attribute in join_attributes:
+            attributes_to_join_on.append(attribute)
+        dialect_1 = table_meta_data_for_join_1.engine.dialect.name
+        dialect_2 = table_meta_data_for_join_2.engine.dialect.name
+        url_1 = table_meta_data_for_join_1.engine.url
+        url_2 = table_meta_data_for_join_2.engine.url
+        if url_1 == url_2 or (dialect_1 == 'mariadb' and dialect_2 == 'mariadb' and url_1.host == url_2.host and url_1.port == url_2.port):
             try:
-                data, column_names = join_tables_of_same_dialect_on_same_server(meta_data_list, attributes_to_join_on, selected_columns_table_1, selected_columns_table_2)
+                data, column_names, unmatched_rows = join_tables_of_same_dialect_on_same_server(meta_data_list, attributes_to_join_on, selected_columns_table_1, selected_columns_table_2, cast_direction)
             except Exception as error:
                 flash(str(error))
                 return redirect(url_for('compare_two_dbs'))
         else:
             try:
-                data, column_names = join_tables_of_different_dialects(meta_data_list, attributes_to_join_on, selected_columns_table_1, selected_columns_table_2)
+                data, column_names, unmatched_rows = join_tables_of_different_dialects_dbs_or_servers(meta_data_list, attributes_to_join_on, selected_columns_table_1, selected_columns_table_2, cast_direction)
             except Exception as error:
                 flash(str(error))
                 return redirect(url_for('compare_two_dbs'))
         db_name_1 = table_meta_data_for_join_1.engine.url.database
         db_name_2 = table_meta_data_for_join_2.engine.url.database
-        dialects = [table_meta_data_for_join_1.engine.dialect.name, table_meta_data_for_join_2.engine.dialect.name]
-        table_name_1 = table_meta_data_for_join_1.table
-        table_name_2 = table_meta_data_for_join_2.table
+        dialects = [dialect_1, dialect_2]
+        table_name_1 = table_meta_data_for_join_1.table_name
+        table_name_2 = table_meta_data_for_join_2.table_name
         
-        return render_template('joined-preview.html', db_name_1 = db_name_1, db_name_2 = db_name_2, table_name_1 = table_name_1, table_name_2 = table_name_2, db_dialects = dialects, join_attribute_1 = join_attributes[0], join_attribute_2 = join_attributes[1], table_columns = column_names, data = data)
+        return render_template('joined-preview.html', db_name_1 = db_name_1, db_name_2 = db_name_2, table_name_1 = table_name_1, table_name_2 = table_name_2, db_dialects = dialects, join_attribute_1 = join_attributes[0], join_attribute_2 = join_attributes[1], table_columns = column_names, data = data, unmatched_rows = unmatched_rows)
 
 
 @app.route('/merge', methods = ['GET', 'POST'])
@@ -618,7 +629,14 @@ def merge_tables():
     if request.method == 'GET':
         pass
     elif request.method == 'POST':
-        pass
+        target_table = request.form['target-table']
+        if target_table == 'table_1':
+            source_table_data = meta_data_table_2
+            target_table_data = meta_data_table_1
+        else: 
+            source_table_data = meta_data_table_1
+            target_table_data = meta_data_table_2
+       
     
 @app.route('/logout', methods = ['GET', 'POST'])
 def logout():
@@ -662,73 +680,31 @@ def login_to_db(username, password, host, port, db_name, db_dialect, db_encoding
                 db_in_use += 2
     return status
 
-# gibt eine ganze Zahl aus, je nach Status der Überprüfung
-# 0: Prüfung erfolgreich, Daten können eingefügt werden
-# 1: eingegebener Wert kann nicht in den Datentyp des durchsuchten Attributs konvertiert werden
-# 2: gesuchter Wert entspricht nicht dem Datentyp des durchsuchten Attributs
-# 3: eingegebener Text überschreitet die in der Datenbank maximal erlaubte Zeichenanzahl
-# 4: keine Einträge für diese Suche
-# 5: aktualisierte Daten würden eine 'unique'-Constraint verletzen
-# 6: aktualisierte Daten verletzen eine Constraint
-# 7: anderer Fehler bei der Datenbankabfrage
-def check_validity_of_input_and_searched_value(table_name:str, input:str, cols_and_dtypes:dict, column_name:str, old_value:str):
-    is_int_float_text_or_other = cols_and_dtypes[column_name]['data_type_group']
-    if is_int_float_text_or_other == 1:
-        if not re.match(r'^[-+]?([[1-9]\d*|0])(\.[0]+)?$', input):
-            return 1
-        else:
-            try:
-                input = int(input)
-            except ValueError:
-                return 1
-    elif is_int_float_text_or_other == 2:
-        if not re.match(r'^[-+]?([[1-9]\d*|0])(\.[0]+)?$', input):
-            return 2
-        else:
-            try:
-                input = float(input)
-            except ValueError:
-                return 2
-    elif is_int_float_text_or_other == 0:
-        char_max_length = cols_and_dtypes[column_name]['char_max_length']
-        if char_max_length != None and len(input) > char_max_length:
-            return 3
-    
-    try:
-        check_result = check_data_type_and_constraint_compatibility(engine_1, table_name, column_name, is_int_float_text_or_other, input, old_value)
-    except Exception as error:
-        if 'unique' in str(error).lower():
-            print(error)
-            return 5
-        elif 'constraint' in str(error).lower():
-            return 6
-        else:
-            return 7
-    else:
-        return check_result
     
 def show_both_tables_separately(compatibility_by_code:dict):
-    db_name_1 = metadata_table_1.engine.url.database
-    db_name_2 = metadata_table_2.engine.url.database
+    db_name_1 = meta_data_table_1.engine.url.database
+    db_name_2 = meta_data_table_2.engine.url.database
     db_dialects = []
-    db_dialects.append(metadata_table_1.engine.dialect.name)
-    db_dialects.append(metadata_table_2.engine.dialect.name)
+    db_dialects.append(meta_data_table_1.engine.dialect.name)
+    db_dialects.append(meta_data_table_2.engine.dialect.name)
     for index, dialect in enumerate(db_dialects):
         if dialect == 'mariadb':
             db_dialects[index] = 'MariaDB'
         elif dialect == 'postgresql':
             db_dialects[index] = 'PostgreSQL'
-    table_1 = metadata_table_1.table
-    table_2 = metadata_table_2.table
-    data_1 = get_full_table_ordered_by_primary_key(metadata_table_1.engine, metadata_table_1.table, metadata_table_1.primary_keys)
-    data_2 = get_full_table_ordered_by_primary_key(metadata_table_2.engine, metadata_table_2.table, metadata_table_2.primary_keys)
-    table_columns_1 = metadata_table_1.columns
-    table_columns_2 = metadata_table_2.columns
-    return render_template('two-tables.html', db_name_1 = db_name_1, db_dialects = db_dialects, table_name_1 = table_1, db_name_2 = db_name_2, table_name_2 = table_2, 
+    table_1 = meta_data_table_1.table_name
+    table_2 = meta_data_table_2.table_name
+    data_1 = get_full_table_ordered_by_primary_key(meta_data_table_1)
+    data_2 = get_full_table_ordered_by_primary_key(meta_data_table_2)
+    table_columns_1 = meta_data_table_1.columns
+    table_columns_2 = meta_data_table_2.columns
+    return render_template('compare.html', db_name_1 = db_name_1, db_dialects = db_dialects, table_name_1 = table_1, db_name_2 = db_name_2, table_name_2 = table_2, 
                                table_columns_1 = table_columns_1, data_1 = data_1, table_columns_2 = table_columns_2, data_2 = data_2, comp_by_code = compatibility_by_code)
 
 
 if __name__ == '__main__':
+    
+    print(len((False, 0)))
     app.secret_key = os.urandom(12)
     serve(app, host = '0.0.0.0', port = 8000)
     

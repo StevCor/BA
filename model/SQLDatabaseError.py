@@ -17,3 +17,8 @@ class DialectError(Exception):
     """Exception für Fehler durch Eingabe eines nicht implementierten SQL-Dialekts."""
     def __init__(self, message:str):
         super().__init__(f'SQL-Dialekt-Fehler. {message}')
+
+class MergeError(Exception):
+    """Exception für Fehler beim Übertragen eines Attributs zwischen zwei Tabellen."""
+    def __init__(self, message:str):
+        super().__init__(f'Fehler beim Verbinden der Tabellen. {message}')

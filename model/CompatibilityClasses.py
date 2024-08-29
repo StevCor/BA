@@ -47,3 +47,63 @@ def get_int_value_by_dialect_name(dialect_name:str, dtype:str):
         return PostgresInt.value_of(dtype)
     else:
         raise DialectError(f'Der SQL-Dialekt {dialect_name} wird nicht unterstützt.')
+    
+class MariaToPostgresCompatibility():
+    data_types = {
+        'tinyint': 'smallint',
+        'smallint': 'smallint',
+        'smallint unsigned': 'integer',
+        'mediumint': 'integer',
+        'mediumint unsigned': 'integer',
+        'int': 'integer',
+        'int unsigned': 'bigint',
+        'bigint': 'bigint',
+        'bigint unsigned': 'numeric(20)',
+
+        'serial': 'bigserial',
+
+        'tinyint(1)': 'boolean',
+
+        'decimal': 'numeric',
+        'double': 'double precision',
+        'float': 'real',
+
+        'char': 'character',
+        'varchar': 'character varying',
+        'tinytext': 'text',
+        'text': 'text',
+        'mediumtext': 'text',
+        'longtext': 'text',
+
+        'date': 'date',
+        'datetime': 'timestamp',
+        'time': 'time',
+        'timestamp': 'timestamp',
+
+    }
+
+class PostgresToMariaCompatibility():
+    data_types = {
+        'smallint': 'smallint',
+        'integer': 'int',
+        'bigint': 'bigint',
+
+        'smallserial': 'serial',
+        'serial': 'serial',
+        'bigserial': 'serial',
+
+        'boolean': 'tinyint(1)',
+
+        'double precision': 'double',
+        'numeric': 'decimal',
+        'real': 'float',
+
+        '"char"': 'char',
+        'character': 'char',
+        'character varying': 'varchar',
+
+        'date': 'date',
+        'time': 'time',
+        'timestamp': 'timestamp'
+
+    }

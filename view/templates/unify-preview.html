@@ -23,8 +23,8 @@
                     onclick="return confirm('Sind Sie sicher? Sie kehren dann zur Anmeldeseite zurück.')"> Verbindung
                     trennen </button></a>
         </div>
-        <button></button>
 
+        <button id="backButton">Zurück</button>
         <div class="links">
             <a href="{{ url_for('search_entries') }}">Suchen</a>
             <a href="{{ url_for('search_and_replace_entries') }}">Suchen und Ersetzen</a>
@@ -49,30 +49,38 @@
                         {% for row in data %}
                         {% set __ = row_count.append(1) %}
                         {% set attribute_count = [] %}
+                        {% if row_count | length in affected_rows %}
                         <tr>
                             {% for item in row %}
                             {% set __ = attribute_count.append(1) %}
-                            {% if row_count | length in affected_rows and attribute_count | length ==
-                            index_of_affected_attribute %}
+                            {% if attribute_count | length == index_of_affected_attribute %}
                             <td><span style="color: green;">{{ new_value }} </span>(alt: {{item}})</td>
                             {% else %}
                             <td>{{ item }}</td>
                             {% endif %}
                             {% endfor %}
                         </tr>
+                        {% endif %}
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
 
-            <input type="hidden" id="columntounify" name="columntounify" value="{{ column_to_unify }}">
-            <input type="hidden" id="oldvalues" name="oldvalues" value="{{ old_values }}">
-            <input type="hidden" id="newvalue" name="newvalue" value="{{ new_value }}">
+            <input type="hidden" id="column-to-unify" name="column-to-unify" value="{{ column_to_unify }}">
+            <input type="hidden" id="old-values" name="old-values" value="{{ old_values }}">
+            <input type="hidden" id="new-value" name="new-value" value="{{ new_value }}">
             {{ affected_rows | length }} von {{ row_total }} Einträgen werden verändert.
-            <button onclick="confirmBack()">Abbrechen</button>
             <input type="submit" value="Änderungen durchführen">
         </form>
     </div>
+
+    <script src="{{url_for('static', filename='confirmBack.js')}}"></script>
+    <script>
+        const backButton = document.getElementById('backButton')
+        backButton.addEventListener('click', function () {
+            confirmBack();
+        });
+    </script>
 </body>
 
 </html>

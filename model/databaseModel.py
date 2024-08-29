@@ -1,8 +1,10 @@
 from argparse import ArgumentError
+import datetime
 from sqlalchemy import CursorResult, Engine, create_engine, text, bindparam
 import urllib.parse
 from sqlalchemy.exc import OperationalError as operror
 from sqlalchemy.exc import ArgumentError as argerror
+from ControllerClasses import TableMetaData
 from model.SQLDatabaseError import DatabaseError, DialectError, QueryError, UpdateError
 
 def connect_to_db(username:str, password:str, host:str, port:int, db_name:str, db_dialect:str, db_encoding:str):
@@ -44,54 +46,12 @@ def connect_to_db(username:str, password:str, host:str, port:int, db_name:str, d
         raise DatabaseError('Bitte überprüfen Sie Ihre Angaben und versuchen es erneut.')
     else:
         engine = test_engine
-        if db_dialect == 'mariadb':
-            # Ermöglicht die Verwendung von Anführungszeichen zur Kennzeichnung von als Identfier verwendeten Keywords und für Strings
-            with engine.connect() as connection:
-                # https://database.guide/7-options-for-enabling-pipes-as-the-concatenation-operator-in-mariadb/
-                connection.execute(text("SET sql_mode='POSTGRESQL';"))
-                #connection.execute(text("SET sql_mode='ANSI_QUOTES'"))
-                connection.commit()
     finally:
         try:
             connection.close()
         except UnboundLocalError:
             print('Keine Verbindung aufgebaut, daher auch kein Schließen nötig.')
     return engine
-
-# Ausgabe eines Dictionarys mit allen Tabellen- (Schlüssel) und deren Spaltennamen (als Liste), um sie in der Web-Anwendung anzeigen zu können
-def list_all_tables_in_db(engine:Engine):
-    table_names = dict()
-    query = ''
-    if engine.dialect.name == 'postgresql':
-        query = text("SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname != 'pg_catalog' AND schemaname != 'information_schema'")
-    elif engine.dialect.name == 'mariadb':
-        query = text("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_TYPE LIKE 'BASE_TABLE' AND TABLE_SCHEMA = DATABASE()")
-    else:
-        return None
-    # with engine.connect() as connection:
-    #     result = connection.execute(query)
-    result = execute_sql_query(engine, query)
-    for row in result:
-        current_table = ''.join(tuple(row))
-        query = f"SELECT column_name FROM information_schema.columns where table_name = '{current_table}'"
-        if engine.dialect.name == 'postgresql':
-            query = f"{query} AND table_catalog = '{engine.url.database}'"
-        elif engine.dialect.name == 'mariadb':
-            query = f"{query} AND table_schema = DATABASE()"
-        # columns_result = connection.execute(text(query))
-        columns_result = execute_sql_query(engine, text(query))
-        column_names = list()
-        for column in columns_result:
-            column = ''.join(tuple(column))
-            column_names.append(column)
-        table_names[current_table] = column_names
-    # trotz with-Statement nötig, weil die Verbindung nicht geschlossen, sondern nur eine abgebrochene Transaktion rückgängig gemacht wird
-    # try:
-    #     connection.close()
-    # except UnboundLocalError:
-    #     print('Keine Verbindung erstellt.')
-    print(table_names)
-    return table_names
 
 def list_all_tables_in_db_with_preview(engine:Engine):
     table_names_and_columns = {}
@@ -114,14 +74,13 @@ def list_all_tables_in_db_with_preview(engine:Engine):
         table_previews[current_table] = preview_list
     print(table_names_and_columns, table_previews)
     return table_names_and_columns, table_previews
+ 
 
-
-def get_full_table(engine:Engine, table_name:str):
-    query = text(f'SELECT * FROM {table_name}')
-    return convert_result_to_list_of_lists(execute_sql_query(engine, query))   
-
-def get_full_table_ordered_by_primary_key(engine:Engine, table_name:str, primary_keys:list, convert:bool = True):
-    table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
+def get_full_table_ordered_by_primary_key(table_meta_data:TableMetaData, convert:bool = True):
+    engine = table_meta_data.engine
+    db_dialect = engine.dialect.name
+    table_name = convert_string_if_contains_capitals_or_spaces(table_meta_data.table_name, db_dialect)
+    primary_keys = table_meta_data.primary_keys
     keys_for_ordering = ', '.join(primary_keys)
     query = text(f'SELECT * FROM {table_name} ORDER BY {keys_for_ordering}')
     if convert:
@@ -129,313 +88,12 @@ def get_full_table_ordered_by_primary_key(engine:Engine, table_name:str, primary
     else:
         return execute_sql_query(engine, query)
 
-def search_string(engine:Engine, table_name:str, cols_and_dtypes:dict, string_to_search:str):
-    primary_key = str()
-    primary_keys = get_primary_key_from_engine(engine, table_name)
-    for index, key in enumerate(primary_keys):
-        if index == 0:
-            primary_key = key
-        else:
-            primary_key = f'{primary_key}, {key}'
-    table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
-    string_to_search = escape_string(engine.dialect.name, string_to_search)
-    sql_condition = 'WHERE'
-    operator, cast_data_type = set_operator_and_cast_data_type(engine.dialect.name)
-    for key in cols_and_dtypes.keys():
-        attribute_to_search = convert_string_if_contains_capitals_or_spaces(key, engine.dialect.name).strip()
-        if cols_and_dtypes[key]['data_type_group'] != 0:
-            attribute_to_search = f'CAST ({attribute_to_search} AS {cast_data_type})'
-        if sql_condition == 'WHERE':
-            sql_condition = f"{sql_condition} {attribute_to_search} {operator} '%{string_to_search}%'"
-        else:
-            sql_condition = f"{sql_condition} OR {attribute_to_search} {operator} '%{string_to_search}%'"
-        
-    query = text(f"SELECT * FROM {table_name} {sql_condition}")
-
-    # für den Fall, dass nur die Schlüssel und die durchsuchten Felder ausgegeben werden sollen:
-    # if column_name in primary_key.split(','):
-    #     query = f"SELECT {primary_key} FROM {table_name} WHERE {attribute_to_search} LIKE '%{string_to_search}%'"
-    # else:
-    #     query = f"SELECT {primary_key}, {column_name} FROM {table_name} WHERE {attribute_to_search} LIKE '%{string_to_search}%'"
-    if engine.dialect.name == 'postgresql' or engine.dialect.name == 'mariadb':
-        # with engine.connect() as connection:
-        #     result = connection.execute(query)
-        result = convert_result_to_list_of_lists(execute_sql_query(engine, query))
-    else:
-        print('Nicht implementiert.')
-    return result
-
-def get_replacement_information(engine:Engine, table_name:str, affected_attributes_and_positions:list, cols_dtypes_and_numbertypes:dict, primary_keys:list, old_value:str, replacement:str):
-    if len(affected_attributes_and_positions) != len(cols_dtypes_and_numbertypes.keys()):
-        raise ArgumentError('Für alle Attribute der Tabelle muss angegeben sein, ob sie von der Änderung betroffen sein können oder nicht.')
-    affected_attributes = []
-    positions = []
-    for item in affected_attributes_and_positions:
-        print('item: ', item)
-        if item[1]:
-            affected_attributes.append(item[0])
-        positions.append(item[1])
-        
-    occurrence_dict = {}
-    if len(affected_attributes) > 1:
-        unaltered_table = get_full_table_ordered_by_primary_key(engine, table_name, primary_keys, convert = False)
-        all_attributes = list(unaltered_table.keys())
-        primary_key_indexes = []
-        for index, key in enumerate(all_attributes):
-            if key in primary_keys:
-                primary_key_indexes.append(index)
-        unaltered_table = convert_result_to_list_of_lists(unaltered_table)
-        table_with_full_replacement = replace_all_string_occurrences(engine, table_name, affected_attributes, cols_dtypes_and_numbertypes, old_value, replacement, commit = False)
-        row_nos_old_and_new_values = get_indexes_of_affected_attributes_for_replacing(engine, table_name, cols_dtypes_and_numbertypes, primary_keys, old_value, affected_attributes)
-        occurrence_counter = 0
-        primary_key_value = []
-        for row_no in row_nos_old_and_new_values.keys():
-            old_values = list(unaltered_table[row_no-1])
-            positions = row_nos_old_and_new_values[row_no]
-            for index in positions:
-                if index != 0:
-                    occurrence_counter += 1
-                    for pk_index in primary_key_indexes:
-                        primary_key_value.append(old_values[pk_index])
-                    occurrence_dict[occurrence_counter] = {'row_no': row_no, 'primary_key': primary_key_value, 'affected_attribute': all_attributes[index]}
-            new_values = list(table_with_full_replacement[row_no-1])
-            for index in range(len(old_values)):
-                if not positions[index]:
-                    new_values[index] = None
-            row_nos_old_and_new_values[row_no] = {'old': old_values, 'positions': positions, 'new': new_values, 'primary_key': primary_key_value}
-    elif len(affected_attributes) == 1:
-        attribute_with_full_replacement = replace_all_string_occurrences(engine, table_name, affected_attributes, cols_dtypes_and_numbertypes, old_value, replacement, commit = False)
-        affected_row_nos_and_unaltered_entries = get_row_number_of_affected_entries(engine, table_name, cols_dtypes_and_numbertypes, affected_attributes, primary_keys, [old_value], 'replace', convert = False)
-        row_nos_old_and_new_values = dict()
-        affected_column_no = None
-        occurrence_counter = 0
-        for row in attribute_with_full_replacement:
-            print('This is it: ', row)
-        for index, key in enumerate(affected_row_nos_and_unaltered_entries.keys()):
-            print('KEY:', key)
-            if key == affected_attributes[0]:
-                affected_column_no = index - 1
-                break
-        for row in affected_row_nos_and_unaltered_entries:
-            primary_key_value = []
-            for index, key in enumerate(affected_row_nos_and_unaltered_entries.keys()):
-                if key in primary_keys:
-                    primary_key_value.append(row[index])
-            print('ROW: ', row)
-            row_no = row[0]
-            old_values = list(row[1:])
-            new_values = [None] * len(old_values)
-            print(affected_column_no)
-            new_values[affected_column_no] = attribute_with_full_replacement[row_no-1][0]
-            print(primary_key_value)
-            row_nos_old_and_new_values[row_no] = {'old': old_values, 'positions': positions, 'new': new_values, 'primary_key': primary_key_value}
-            occurrence_counter += 1
-            occurrence_dict[occurrence_counter] = {'row_no': row_no, 'primary_key': primary_key_value, 'affected_attribute': affected_attributes[0]}
-    else:
-        raise ArgumentError('Es muss mindestens ein Attribut angegeben sein, dessen Werte bearbeitet werden sollen.')
-    return row_nos_old_and_new_values, occurrence_dict
-            
-            
-            
-    
 
 
-def get_indexes_of_affected_attributes_for_replacing(engine:Engine, table_name:str, cols_dtypes_and_numbertypes:dict, primary_keys:list, old_value:str, affected_attributes:list = None):
-    table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
-    string_to_replace = escape_string(engine.dialect.name, old_value)
-    params_dict = {'old_value': string_to_replace}
-    keys = ', '.join(primary_keys)
-    query = 'SELECT'
-    case_selected_attribute = 'THEN 1 ELSE 0 END'
-    case_nonselected_attribute = '0'
-    operator, cast_data_type = set_operator_and_cast_data_type(engine.dialect.name)
-    if engine.dialect.name == 'postgresql':
-        condition = f"{operator} '%' || :old_value || '%'"
-    elif engine.dialect.name == 'mariadb':
-        condition = f"{operator} CONCAT('%', CONCAT(:old_value, '%'))"
-    else:
-        raise DialectError(f'Der SQL-Dialekt {engine.dialect.name} wird nicht unterstützt.')
-    for index, key in enumerate(cols_dtypes_and_numbertypes.keys()):
-        if affected_attributes == None or (affected_attributes != None and key in affected_attributes):
-            if cols_dtypes_and_numbertypes[key]['data_type_group'] != 0: #[1]
-                query = f'{query} CASE WHEN CAST({key} AS {cast_data_type}) {condition} {case_selected_attribute}'
-            else:
-                query = f'{query} CASE WHEN {key} {condition} {case_selected_attribute}'
-        else: 
-            query = f'{query} {case_nonselected_attribute}'
-        if index < len(cols_dtypes_and_numbertypes.keys())-1:
-            query = f'{query},'
-    query = text(f'{query} FROM {table_name} ORDER BY {keys}')
-    print(query)
-    result = execute_sql_query(engine, query, params_dict)
-
-    row_ids = dict()
-    for index, row in enumerate(result):
-        if sum(row) != 0:
-            # index + 1, da die SQL-Funktion ROW_NUMBER() ab 1 zählt; Listenkonversion, damit die Einträge verändert werden können
-            row_ids[index+1] = list(row)
-
-    # Variante mit Ausgabe aller Attribute & Indizes
-    # primary_key_indexes = []
-    # for index, key in enumerate(result.keys()):
-    #     if key in primary_keys:
-    #         primary_key_indexes.append(index)
-    # print('PKs: ', primary_key_indexes)
-    # key_list = []
-    # for index, row in enumerate(result):
-    #     print(row)
-
-    #     item_index = 0
-    #     while item_index < len(row)/2:
-    #         if item_index in primary_key_indexes:
-    #             key_list.append(row[item_index])
-    #         item_index += 1
-
-    #     row = row[len(row)//2:]
-    #     if sum(row) != 0:
-    #         row_ids[tuple(key_list)] = list(row)
-    #     key_list = []
-    return row_ids
-
-# alle Vorkommen eines Teilstrings ersetzen
-def replace_all_string_occurrences(engine:Engine, table_name:str, column_names:list, cols_and_dtypes:dict, string_to_replace:str, replacement_string:str, commit:bool = False):
-    table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
-    string_to_replace = escape_string(engine.dialect.name, string_to_replace)
-    replacement_string = escape_string(engine.dialect.name, replacement_string)
-    primary_keys = ', '.join(get_primary_key_from_engine(engine, table_name))
-    update_params = {}
-    flag = ''
-    if engine.dialect.name == 'postgresql':
-        flag = ", 'g'"
-    query = f'UPDATE {table_name} SET'
-    for index, column_name in enumerate(column_names):
-        column_name = convert_string_if_contains_capitals_or_spaces(column_name, engine.dialect.name)
-        is_text_int_float_or_other = cols_and_dtypes[column_name]['data_type_group']
-        if is_text_int_float_or_other != 0:
-            query = f"{query} {column_name} = :new_value_{str(index)}"
-            if is_text_int_float_or_other == 1:
-                update_params[f'new_value_{str(index)}'] = int(replacement_string)
-            elif is_text_int_float_or_other == 2:
-                update_params[f'new_value_{str(index)}'] = float(replacement_string)
-            elif is_text_int_float_or_other == 3:
-                update_params[f'new_value_{str(index)}'] = replacement_string
-        else:
-            query = f"{query} {column_name} = regexp_replace({column_name}, :string_to_replace, :replacement_string{flag})"
-            if 'string_to_replace' not in update_params.keys():
-                update_params['string_to_replace'] = string_to_replace
-                update_params['replacement_string'] = replacement_string
-        if column_name != column_names[len(column_names)-1]:
-            query = f'{query},' 
-    print(query)
-    query = text(query)
-    for key in update_params.keys():
-        query.bindparams(bindparam(key))
-    try:
-        connection = engine.connect()
-        connection.execute(query, update_params)
-        if len(column_names) == 1 and commit == False:
-            result = connection.execute(text(f'SELECT {column_names[0]} FROM {table_name} ORDER BY {primary_keys}'))
-        else:
-            result = connection.execute(text(f'SELECT * FROM {table_name} ORDER BY {primary_keys}'))
-    except Exception as error:
-        connection.rollback()        
-        raise UpdateError(str(error))
-    else:
-        if commit:
-            connection.commit()
-        else:
-            connection.rollback()
-    finally:
-        try:
-            connection.close()
-        except Exception as error:
-            raise error
-    return convert_result_to_list_of_lists(result)
-
-def replace_some_string_occurrences(engine:Engine, table_name:str, cols_and_dtypes:dict, occurrences_dict:dict, string_to_replace:str, replacement_string:str, commit:bool = False):
-    table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
-    string_to_replace = escape_string(engine.dialect.name, string_to_replace)
-    replacement_string = escape_string(engine.dialect.name, replacement_string)
-    primary_key_attributes = occurrences_dict[0]['primary_keys']
-    occurrences_dict.pop(0)
-    success_counter = 0
-    failed_updates = []
-    for row in occurrences_dict.values():
-        print(row)
-        query = f'UPDATE {table_name} SET'
-        update_params = {}
-        primary_key = row['primary_key']
-        flag = ''
-        if engine.dialect.name == 'postgresql':
-            flag = ", 'g'"
-        if len(primary_key) != len(primary_key_attributes):
-            raise QueryError('Es müssen gleich viele Spaltennamen und Attributwerte für den Primärschlüssel angegeben werden.')
-        affected_attribute = row['affected_attribute']
-        is_text_int_float_or_other = cols_and_dtypes[affected_attribute]['data_type_group']
-        if is_text_int_float_or_other != 0:
-            query = f"{query} {affected_attribute} = :new_value"
-            if is_text_int_float_or_other == 1:
-                update_params[f'new_value'] = int(replacement_string)
-            elif is_text_int_float_or_other == 2:
-                update_params[f'new_value'] = float(replacement_string)
-            elif is_text_int_float_or_other == 3:
-                update_params[f'new_value'] = replacement_string
-        else:
-            query = f"{query} {affected_attribute} = regexp_replace({affected_attribute}, :string_to_replace, :replacement_string{flag})"
-            update_params['string_to_replace'] = string_to_replace
-            update_params['replacement_string'] = replacement_string
-        for index, key in enumerate(primary_key_attributes):
-            update_params[key] = primary_key[index]
-        condition = build_sql_condition(tuple(primary_key_attributes), engine.dialect.name, 'AND')
-        query = text(f'{query} {condition}')
-        print(query)
-        try:
-            execute_sql_query(engine, query, update_params, raise_exceptions = True, commit = commit)
-        except Exception:
-            failed_updates.append(primary_key)
-        else:
-            success_counter += 1
-    if success_counter == len(occurrences_dict):
-        if len(occurrences_dict) == 1:
-            return f'Der ausgewählte Wert wurde erfolgreich aktualisiert.'
-        else:
-            return f'Alle {len(occurrences_dict)} ausgewählten Werte wurden erfolgreich aktualisiert.'
-    else:
-        if success_counter == 1:
-            verb = 'wurde'
-        else:
-            verb = 'wurden'
-        return f'{success_counter} von {len(occurrences_dict)} betroffenen Werten {verb} erfolgreich aktualisiert. Fehler sind in den Zeilen mit folgenden Primärschlüsselwerten aufgetreten: {failed_updates}. Bitte sehen Sie sich diese nochmal an.'
 
     
 
-def replace_one_string(engine:Engine, table_name:str, column_name:str, string_to_replace:str, replacement_string:str, primary_keys_and_values:dict):
-    table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
-    column_name = convert_string_if_contains_capitals_or_spaces(column_name, engine.dialect.name)
-    if type(string_to_replace) == str:
-        string_to_replace = escape_string(engine.dialect.name, string_to_replace)
-    if type(replacement_string) == str:
-        replacement_string = escape_string(engine.dialect.name, replacement_string)
-    query = ''
-    condition = build_sql_condition(tuple(primary_keys_and_values.keys()), engine.dialect.name, 'AND')
-    flag = ''
-    if engine.dialect.name == 'postgresql': 
-        flag = ", 'g'"       
-    query = f"UPDATE {table_name} SET {column_name} = regexp_replace({column_name}, '{string_to_replace}', '{replacement_string}'{flag})"
-    print(query)
-    query = text(f'{query} {condition};')
-    for key in primary_keys_and_values.keys():
-        query.bindparams(bindparam(key))
-    try:
-        connection = engine.connect() 
-        connection.execute(query, primary_keys_and_values)
-    except:
-        connection.rollback()
-        raise UpdateError()
-    else:
-        connection.commit()
-    finally:
-        connection.close()
+
 
 # # from https://gist.github.com/viewpointsa/bba4d475126ec4ef9427fd3c2fdaf5c1
 # def copy_table(source_engine, connectionStringDst, table_name, verbose=False, condition="" ):
@@ -459,106 +117,11 @@ def replace_one_string(engine:Engine, table_name:str, column_name:str, string_to
 
 
 
-def update_to_unify_entries(engine:Engine, table_name:str, attribute_to_change:str, old_values:list, new_value:str, commit:bool):
-    query = f'UPDATE {convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)} SET {convert_string_if_contains_capitals_or_spaces(attribute_to_change, engine.dialect.name)} = :new_value'
-    cols_and_dtypes = get_column_names_data_types_and_max_length(engine, table_name)
-    condition_dict = {}
-    print(old_values)
-    for index, key in enumerate(cols_and_dtypes.keys()):
-        if key == attribute_to_change:
-            if cols_and_dtypes[key]['data_type_group']:#[1] == 1:
-                new_value = int(new_value)
-                for index, item in enumerate(old_values):
-                    old_values[index] = int(item)
-                break
-            elif cols_and_dtypes[key]['data_type_group']:#[1] == 2:
-                new_value = float(new_value)
-                for item in enumerate(old_values):
-                    old_values[index] = float(item)
-                break 
-    condition_dict['new_value'] = new_value
-    condition = 'WHERE'
-    for index, value in enumerate(old_values):
-        if index == 0:
-            condition = f'{condition} {convert_string_if_contains_capitals_or_spaces(attribute_to_change, engine.dialect.name)} = :value_{str(index)}'
-        else:
-            condition = f'{condition} OR {convert_string_if_contains_capitals_or_spaces(attribute_to_change, engine.dialect.name)} = :value_{str(index)}'
-        condition_dict['value_' + str(index)] = value
-    query = text(f'{query} {condition}')
-    print('UPDATE-Anweisung:', query)
-    # for key in condition_dict.keys():
-    #     query.bindparams(bindparam(key))
-    # # with engine.connect() as connection:
-    #     result = connection.execute(query, condition_dict)
-    #     if commit:
-    #         connection.commit()
-    return execute_sql_query(engine, query, condition_dict, True, commit)
-
-def get_row_number_of_affected_entries(engine:Engine, table_name:str, cols_dtypes_numbertypes_and_length:dict, affected_attributes:list, primary_keys:list, old_values:list, mode:str, convert:bool = True):
-    if not mode == 'replace' and not mode == 'unify':
-        raise QueryError('Nur die Modi \'replace\' und \'unify\' werden unterstützt.')
-    elif mode == 'unify' and len(affected_attributes) != 1:
-        raise QueryError('Im Modus \'unify\' kann nur ein Attribut bearbeitet werden.')
-    elif mode == 'replace' and len(old_values) != 1:
-        raise QueryError('Im Modus \'replace\' kann nur ein Wert ersetzt werden.')
-    
-    operator, cast_data_type = set_operator_and_cast_data_type(engine.dialect.name)
-    key_for_ordering = ', '.join(primary_keys)
-    columns_to_select = '*'
-    if engine.dialect.name == 'mariadb':
-        for key in cols_dtypes_numbertypes_and_length.keys():
-            if columns_to_select == '*':
-                columns_to_select = key
-            else:
-                columns_to_select = f'{columns_to_select}, {key}'
-    query = f"SELECT * FROM (SELECT ROW_NUMBER() OVER (ORDER BY {key_for_ordering}) AS Nr, {columns_to_select} FROM {table_name}) sub"
-
-    condition = 'WHERE'
-    condition_params = {}
-        
-    if mode == 'replace':
-        old_value = old_values[0]
-        condition_params['old_value'] = old_value
-        for index, attribute in enumerate(affected_attributes):
-            attribute_to_search = convert_string_if_contains_capitals_or_spaces(attribute, engine.dialect.name).strip()
-            if engine.dialect.name == 'postgresql':
-                concat_string = "'%' || :old_value || '%'"
-            elif engine.dialect.name == 'mariadb':
-                concat_string = "CONCAT('%', CONCAT(:old_value, '%'))"
-            else:
-                raise DialectError(f'Der SQL-Dialekt {engine.dialect.name} wird nicht unterstützt.')
-            if cols_dtypes_numbertypes_and_length[attribute]['data_type_group'] != 0:
-                attribute_to_search = f'CAST ({attribute_to_search} AS {cast_data_type})'
-            if index == 0:
-                condition = f"{condition} sub.{attribute_to_search} {operator} {concat_string}"
-            else:
-                condition = f"{condition} OR sub.{attribute_to_search} {operator} {concat_string}"
-
-    elif mode == 'unify':
-        affected_attribute = affected_attributes[0]
-        for index, value in enumerate(old_values):
-            if cols_dtypes_numbertypes_and_length[affected_attribute]['data_type_group'] == 0:
-                condition_params['value_' + str(index)] = value
-            elif cols_dtypes_numbertypes_and_length[affected_attribute]['data_type_group'] == 1:
-                condition_params['value_' + str(index)] = int(value)
-            elif cols_dtypes_numbertypes_and_length[affected_attribute]['data_type_group'] == 2:
-                condition_params['value_' + str(index)] = float(value)
-            
-            if index == 0:
-                condition = f"{condition} sub.{convert_string_if_contains_capitals_or_spaces(affected_attribute, engine.dialect.name)} = :{'value_' + str(index)}"
-            else:
-                condition = f"{condition} OR sub.{convert_string_if_contains_capitals_or_spaces(affected_attribute, engine.dialect.name)} = :{'value_' + str(index)}"
-    query = text(f'{query} {condition}')
-    result = execute_sql_query(engine, query, condition_params)
-    if convert:
-        return convert_result_to_list_of_lists(result)
-    else:
-        return result
 
 
-def get_unique_values_for_attribute(engine:Engine, table_name:str, attribute_to_search:str):
-    query = text(f'SELECT DISTINCT {attribute_to_search}, COUNT(*) AS Eintragsanzahl FROM {table_name} GROUP BY {attribute_to_search}')
-    return convert_result_to_list_of_lists(execute_sql_query(engine, query))
+
+
+
 
 def get_column_names_data_types_and_max_length(engine:Engine, table_name:str):
     query = ''
@@ -602,81 +165,14 @@ def get_column_names_data_types_and_max_length(engine:Engine, table_name:str):
 
 
 
-def get_primary_key_from_engine(engine:Engine, table_name:str):
-    table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
-    # with engine.connect() as connection:
-    #     if engine.dialect.name == 'postgresql':
-    #         result = connection.execute(text(f"SELECT a.attname as column_name FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) WHERE i.indrelid = '{table_name}'::regclass AND i.indisprimary"))
-    #     elif engine.dialect.name == 'mariadb':
-    #         result = connection.execute(text(f"SELECT COLUMN_NAME as column_name FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{table_name}' AND COLUMN_KEY = 'PRI'"))
-    
-    query = str()
-    if engine.dialect.name == 'postgresql':
-        # https://wiki.postgresql.org/wiki/Retrieve_primary_key_columns
-        query = text(f"SELECT a.attname as column_name FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) WHERE i.indrelid = '{table_name}'::regclass AND i.indisprimary")
-    elif engine.dialect.name == 'mariadb':
-        query = text(f"SELECT COLUMN_NAME as column_name FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{table_name}' AND COLUMN_KEY = 'PRI'")
-    else: 
-        print('Dialekt wird nicht unterstützt.')
-        return None
-    result = execute_sql_query(engine, query)
 
-    key_list = list()
-    for column_name in result:
-        key_list.append(''.join(tuple(column_name)))
-    print(key_list)
-    return key_list
-
-def get_primary_key_names_and_data_types_from_engine(engine:Engine, table_name:str):
-    # with engine.connect() as connection:
-    #     if engine.dialect.name == 'postgresql':
-    #         result = connection.execute(text(f"SELECT a.attname as column_name, format_type(a.atttypid, a.atttypmod) AS data_type FROM  pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) WHERE i.indrelid = '{table_name}'::regclass AND i.indisprimary"))
-    #     # Ergebnisse werden als Liste von Tupeln im Format '[('Primärschlüssel',)]' ausgegeben 
-    #     elif engine.dialect.name == 'mariadb':
-    #         result = connection.execute(text(f"SELECT COLUMN_NAME as column_name, DATA_TYPE as data_type FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{table_name}' AND COLUMN_KEY = 'PRI'"))
-    query = str()
-    if engine.dialect.name == 'postgresql':
-        query = text(f"SELECT a.attname as column_name, format_type(a.atttypid, a.atttypmod) AS data_type FROM  pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) WHERE i.indrelid = '{table_name}'::regclass AND i.indisprimary")
-    elif engine.dialect.name == 'mariadb':
-        query = text(f"SELECT COLUMN_NAME as column_name, DATA_TYPE as data_type FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{table_name}' AND COLUMN_KEY = 'PRI'")
-    result = execute_sql_query(engine, query)
-    
-    key_data_type_dict = dict()
-    for item in result:
-        as_tuple = tuple(item)
-        key_data_type_dict[as_tuple[0]] = as_tuple[1]
-    return key_data_type_dict
 
 def get_row_count_from_engine(engine:Engine, table_name:str):
-    # with engine.connect() as connection:
-    #     res = connection.execute(text(f'SELECT COUNT(1) FROM {table_name}'))
+    table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
     # https://datawookie.dev/blog/2021/01/sqlalchemy-efficient-counting/
     query = text(f'SELECT COUNT(1) FROM {table_name}')
     res = execute_sql_query(engine, query)
     return res.fetchone()[0] 
-
-def build_update_query(engine:Engine, table_name:str, column_names_of_affected_attributes:tuple, column_names_of_condition:tuple, values:tuple, operator:str):
-    table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
-    if len(column_names_of_affected_attributes) + len(column_names_of_condition) != len(values):
-        raise QueryError('Anzahl der Spaltennamen und Anzahl der Werte stimmen nicht überein.')
-    query = f'UPDATE {table_name} SET'
-    columns = ''
-    for index, title in enumerate(column_names_of_affected_attributes):
-        if len(column_names_of_affected_attributes) > 1 and index > 0:
-            columns = f'{columns},  {convert_string_if_contains_capitals_or_spaces(title, engine.dialect.name)} = :{title}'
-        else:
-            columns = f'{columns}{convert_string_if_contains_capitals_or_spaces(title, engine.dialect.name)} = :{title}'
-    condition = build_sql_condition(column_names_of_condition, engine.dialect.name, operator)
-    query = text(f'{query} {columns} {condition}')
-    print(query)
-    values_as_dict = dict(zip(column_names_of_affected_attributes + column_names_of_condition, values))
-    print(values_as_dict)
-    for key in values_as_dict.keys():
-        print(key)
-        print(values_as_dict[key])
-        query.bindparams(bindparam(key))
-        print(query)
-    return query, values_as_dict
 
 def build_sql_condition(column_names:tuple, db_dialect:str, operator:str = None):
     if (operator and operator.upper() not in ('AND', 'OR')) :
@@ -740,117 +236,129 @@ def execute_sql_query(engine:Engine, query:text, params:dict = None, raise_excep
             print('Keine Verbindung aufgebaut, daher auch kein Schließen nötig.')
     return result
 
-def check_data_type_and_constraint_compatibility(engine:Engine, table_name:str, column_name:str, is_text_int_float_or_other:int, input, old_value:str):
-    if type(input) not in (str, int, float):
-        print('Datentyp kann nicht überprüft werden.')
+
+   
+
+def get_primary_key_from_engine(engine:Engine, table_name:str):
     table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
-    column_name = convert_string_if_contains_capitals_or_spaces(column_name, engine.dialect.name)
-    update_params = {}
-    update_params['old_value'] = old_value
-    pre_query = f'SELECT {column_name} FROM {table_name} WHERE'
-    operator, cast_data_type = set_operator_and_cast_data_type(engine.dialect.name) 
-    string_to_search = "'%' || :old_value || '%'"
-    if engine.dialect.name == 'mariadb':
-        string_to_search = "CONCAT('%', CONCAT(:old_value, '%'))"
-    if is_text_int_float_or_other == 0:
-        pre_query = f"{pre_query} {column_name} {operator} {string_to_search} LIMIT 1"
-    else:
-        pre_query = f"{pre_query} CAST({column_name} AS {cast_data_type}) {operator} '%' {string_to_search} '%' LIMIT 1"
-    print(pre_query)
-    try:
-        result = convert_result_to_list_of_lists(execute_sql_query(engine, text(pre_query), update_params, raise_exceptions = True, commit = False))
-    except Exception as error:
-        raise error
-    else:
-        print(len(result))
-        if len(result) == 0 or result == None:
-            return 4
-        condition_value = result[0][0]
+    query = str()
+    if engine.dialect.name == 'postgresql':
+        # https://wiki.postgresql.org/wiki/Retrieve_primary_key_columns
+        query = text(f"SELECT a.attname as column_name FROM pg_index i JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) WHERE i.indrelid = '{table_name}'::regclass AND i.indisprimary")
+    elif engine.dialect.name == 'mariadb':
+        query = text(f"SELECT COLUMN_NAME as column_name FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{table_name}' AND COLUMN_KEY = 'PRI'")
+    else: 
+        print('Dialekt wird nicht unterstützt.')
+        return None
+    result = execute_sql_query(engine, query)
 
-        query = f'UPDATE {table_name} SET {column_name}'
-        condition = f'WHERE {column_name} = :condition_value'
-        flag = ''
-        if engine.dialect.name == 'postgresql':
-            flag = ", 'g'"
-        if is_text_int_float_or_other == 0:
-            query = f"{query} = regexp_replace({column_name}, :old_value, :new_value{flag})"
-        else:
-            query = f'{query} = :new_value'
-            update_params.pop('old_value')
-            
-        update_params['new_value'] = input
-        update_params['condition_value'] = condition_value
-        query = text(f'{query} {condition}')
+    key_list = list()
+    for column_name in result:
+        key_list.append(''.join(tuple(column_name)))
+    print(key_list)
+    return key_list
+ 
         
-        try:
-            execute_sql_query(engine, query, update_params, raise_exceptions = True, commit = False)
-        except Exception as error:
-            raise error
-        return 0
-    
-        
-def set_operator_and_cast_data_type(db_dialect:str):
-    operator = ''
-    cast_data_type = ''
-    if db_dialect == 'mariadb':
-        operator = 'LIKE'
-        cast_data_type = 'CHAR'
-    elif db_dialect == 'postgresql':
-        operator = 'ILIKE'
-        cast_data_type = 'TEXT'
-    return operator, cast_data_type
 
-def list_attributes_to_select(attributes_to_select:list[str], dialect:str, table_name:str = None, db_name:str = None):
-    attribute_string = ''
-    for index, attribute in enumerate(attributes_to_select):
-        query_attribute = attribute
-        if table_name != None:
-            if not table_name.startswith('"'):
-                table_name = convert_string_if_contains_capitals_or_spaces(table_name, dialect)
-            if db_name != None:
-                if not db_name.startswith('"'):
-                    db_name = convert_string_if_contains_capitals_or_spaces(db_name, dialect)
-                table_name = f'{db_name}.{table_name}'
-            if not query_attribute.startswith('"'):
-                query_attribute = convert_string_if_contains_capitals_or_spaces(query_attribute, dialect)
-            query_attribute = f'{table_name}.{query_attribute}'
-        if index == 0:
-            attribute_string = query_attribute
-        else:
-            attribute_string = f'{attribute_string} {query_attribute}'
-        if len(attributes_to_select) > 1 and attribute != attributes_to_select[len(attributes_to_select) - 1]:
-            attribute_string += ','
-        print(attribute_string)
-    return attribute_string
 
     
 # setzt String in doppelte Anführungszeichen, wenn darin Leerzeichen oder Großbuchstaben enthalten sind (Letzteres ist ausschließlich für 
 # Tabellen- und Spaltennamen in PostgreSQL nötig)
 def convert_string_if_contains_capitals_or_spaces(string:str, db_dialect:str):
-    if (db_dialect == 'postgresql' and any([x.isupper() for x in string])) or any([x == ' ' for x in string]):
+    if not string.startswith('"') and (db_dialect == 'postgresql' and any([x.isupper() for x in string])) or any([x == ' ' for x in string]):
         string = f'"{string}"'
     return string
 
 
 
-    
-def escape_string(db_dialect:str, string:str):
-    if db_dialect == 'postgresql':
-        string = string.replace('%', '\%').replace('_', '\_').replace("'", "\'").replace('"', '\"').replace('\\', '\\\\')
-    elif db_dialect == 'mariadb':
-        string = string.replace('%', '\\%').replace('_', '\\_').replace("'", "\\'").replace('"', '\\"').replace('\\', '\\\\\\\\')
-    return string
 
 def convert_result_to_list_of_lists(sql_result:CursorResult):
     result_list = [list(row) for row in sql_result.all()]
     return result_list  
 
-
+def check_data_type_meta_data(engine:Engine, table_name:str):
+    if not type(engine) == Engine or not type(table_name) == str :
+        raise ArgumentError('Zum Ausführen dieser Funktion sind eine Engine und ein Tabellenname vom Typ String erforderlich.')
+    db_dialect = engine.dialect.name
+    result_dict = {}
+    query = 'SELECT COLUMN_NAME, COLUMN_DEFAULT, IS_NULLABLE, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, DATETIME_PRECISION'
+    print('Dialekt: ', db_dialect)
+    if db_dialect == 'mariadb':
+        query = f'{query}, COLUMN_KEY, COLUMN_TYPE, EXTRA FROM information_schema.columns WHERE TABLE_SCHEMA = DATABASE()'
+    elif db_dialect == 'postgresql':
+        query = f"{query} FROM information_schema.columns WHERE TABLE_CATALOG = '{engine.url.database}'"
+    else:
+        raise DialectError('Dieser SQL-Dialekt wird nicht unterstüzt.')
+    table_name = convert_string_if_contains_capitals_or_spaces(table_name, db_dialect)
+    query = f"{query} AND TABLE_NAME = '{table_name}'"
+   
+    result = convert_result_to_list_of_lists(execute_sql_query(engine, text(query)))
+    print('QUERY: ', query)
+    # für PostgreSQL fehlt noch die Angabe, ob es sich um einen Primärschlüssel oder ein Attribut mit Unique-Constraint handelt
+    if db_dialect == 'postgresql':
+        constraint_query = f"SELECT a.attname FROM pg_constraint con JOIN pg_attribute a ON a.attnum = ANY(con.conkey) JOIN information_schema.columns i ON a.attname = i.column_name AND i.table_name = '{table_name}' WHERE con.conrelid = '{table_name}'::regclass AND con.conrelid = a.attrelid AND (con.contype = 'p' OR con.contype = 'u') AND i.table_catalog = '{engine.url.database}'"
+        constraint_result = execute_sql_query(engine, text(constraint_query))
+        unique_list = []
+        for entry in constraint_result:
+            if entry[0] not in unique_list:
+                unique_list.append(entry[0])
+    for row in result:
+        print('ROW. ', row)
+        column_name = row[0]
+        column_default = row[1]
+        if row[2] == 'YES':
+            is_nullable = True
+        else:
+            is_nullable = False                
+        data_type = row[3]
+        if (db_dialect == 'mariadb' and row[10] is not None and 'auto_increment' in row[10]) or (db_dialect == 'postgresql' and column_default is not None and 'nextval' in column_default):
+            auto_increment = True
+        else:
+            auto_increment = False
+        character_max_length = row[4]
+        numeric_precision = row[5]
+        numeric_scale = row[6]
+        datetime_precision = row[7]
+        if (db_dialect == 'mariadb' and (row[8] == 'PRI' or row[8] == 'UNI')) or (db_dialect == 'postgresql' and [table_name, column_name] in unique_list):
+            is_unique = True
+        else:
+            is_unique = False  
+        if (db_dialect == 'mariadb' and 'unsigned' in row[9].lower()) or (db_dialect == 'postgresql' and (data_type == 'boolean' or 'serial' in data_type)):
+            is_unsigned = True
+        else:
+            is_unsigned = None
+        result_dict[column_name] = {}
+        if datetime_precision != None:
+            result_dict[column_name] = {'data_type_group': 'date', 'data_type': data_type, 'datetime_precision': datetime_precision}
+        elif character_max_length != None:
+            result_dict[column_name] = {'data_type_group': 'text', 'data_type': data_type, 'character_max_length': character_max_length}
+        elif (db_dialect == 'mariadb' and 'tinyint(1)' in row[9].lower()) or (db_dialect == 'postgresql' and data_type == 'boolean'):
+                result_dict[column_name] = {'data_type_group': 'boolean', 'data_type': 'boolean'}        
+        elif numeric_precision != None:
+            if 'int' in data_type or numeric_scale == 0:
+                if db_dialect == 'mariadb' and data_type == 'bigint' and is_unsigned and not is_nullable and auto_increment and is_unique:
+                    data_type = 'serial'
+                elif db_dialect == 'postgresql' and auto_increment:
+                    if data_type == 'bigint':
+                        data_type = 'bigserial'
+                    elif data_type == 'integer':
+                        data_type = 'serial'
+                    elif data_type == 'smallint':
+                        data_type = 'smallserial'
+                result_dict[column_name] = {'data_type_group': 'integer', 'data_type': data_type, 'numeric_precision': numeric_precision}
+            else:
+                result_dict[column_name] = {'data_type_group': 'decimal', 'data_type': data_type, 'numeric_precision': numeric_precision, 'numeric_scale': numeric_scale}
+        else: 
+            result_dict[column_name] = {'data_type_group': data_type, 'data_type': data_type}
+        if is_unsigned != None:
+            result_dict[column_name]['is_unsigned'] = is_unsigned
+        result_dict[column_name]['is_nullable'] = is_nullable
+        result_dict[column_name]['is_unique'] = is_unique
+        result_dict[column_name]['auto_increment'] = auto_increment
+    return result_dict
 
 if __name__ == '__main__':
     engine = connect_to_db('postgres', 'arc-en-ciel', 'localhost', 5432, 'Test', 'postgresql', 'utf8')
-    cols = get_column_names_data_types_and_max_length(engine, 'studierende')
-    ls = get_indexes_of_affected_attributes_for_replacing(engine, 'studierende', cols, ['matrikelnummer'], '2', 'matrikelnummer')
     yo = get_full_table_ordered_by_primary_key(engine, 'studierende', ['matrikelnummer'])
     for line in yo:
         print('line: ', line)

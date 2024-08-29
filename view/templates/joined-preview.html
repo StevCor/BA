@@ -28,6 +28,10 @@
             {{ table_name_1 }}.{{ join_attribute_1 }} und {{ table_name_2 }}.{{ join_attribute_2 }}</h4>
         <div id="joined-table"></div>
 
+        {{ unmatched_rows[table_name_1] }} Tupel aus {{ db_name_1 }}.{{ table_name_1 }} und {{
+        unmatched_rows[table_name_2] }} Tupel aus {{ db_name_2 }}.{{ table_name_2 }} konnten keinem Tupel aus der
+        anderen Tabelle zugeordnet werden.
+
     </div>
     <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
     <script src="{{url_for('static', filename='showTable.js')}}"></script>

@@ -52,7 +52,7 @@ body {
 .connect h1,
 .selecttable h1 {
     text-align: center;
-    color: brown;
+    color: #006ab3;
     font-size: 24px;
     padding: 20px 0 20px 0;
     border-bottom: 1px solid #dee0e4;
@@ -86,14 +86,14 @@ body {
 .login .links a:hover,
 .register .links a:hover,
 .connect .links a:hover {
-    color: brown;
+    color: #006ab3;
 }
 
 .login .links a.active,
 .register .links a.active,
 .connect .links a.active {
-    border-bottom: 3px solid brown;
-    color: brown;
+    border-bottom: 3px solid #006ab3;
+    color: #006ab3;
 }
 
 .login form,
@@ -128,7 +128,7 @@ body {
     align-items: center;
     width: 50px;
     height: 50px;
-    background-color: brown;
+    background-color: #006ab3;
     color: #ffffff;
 }
 
@@ -138,7 +138,7 @@ body {
     margin-left: 10px;
     display: inline-block;
     height: 50px;
-    background-color: brown;
+    background-color: #006ab3;
     color: #ffffff;
 }
 
@@ -218,7 +218,7 @@ textarea {
     width: 100%;
     padding: 12px;
     margin-top: 20px;
-    background-color: brown;
+    background-color: #006ab3;
     border: 0;
     cursor: pointer;
     font-weight: bold;
@@ -228,7 +228,7 @@ textarea {
 
 .login form input[type="submit"]:hover,
 .register form input[type="submit"]:hover {
-    background-color: brown;
+    background-color: #006ab3;
     transition: background-color 0.2s;
 }
 
