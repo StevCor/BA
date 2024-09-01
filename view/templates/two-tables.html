@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <title>SQL-Datenbanken</title>
+    {% include 'css.html' %}
+    <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+    <!--<link rel="stylesheet" href="{{ url_for('static', filename='styles/two-tables.css') }}">-->
+</head>
+
+<body>
+    <div class="two-tables">
+        <div class="connection">
+            <h3>Verbunden mit Datenbank {{ db_name_1 }} ({{ db_dialects[0] }}), Tabelle {{ table_name_1 }} und Datenbank
+                {{
+                db_name_2 }} ({{ db_dialects[1]}}), Tabelle {{ table_name_2 }}</h3>
+            <a href="{{ url_for('disconnect_from_single_db') }}"><button
+                    onclick="return confirm('Sind Sie sicher? Sie kehren dann zur Anmeldeseite zurück.')"> Verbindung
+                    trennen </button></a>
+        </div>
+        <div class="links">
+            <button id="backButton">Zurück</button>
+            <div class="tab">
+                <a href="{{ url_for('compare_two_tables') }}" {% if mode=='compare' %} class="active" {% endif
+                    %}>Tabellen
+                    vergleichen</a>
+                <a href="{{ url_for('merge_tables') }}" {% if mode=='merge' %} class="active" {% endif %}>Tabellen
+                    verbinden</a>
+            </div>
+        </div>
+        {% include 'message.html' %}
+        <div class="selection">
+            {% if mode == 'compare'%}
+            <form action="/compare" method="POST">
+                {% elif mode == 'merge'%}
+                <form action="/merge-preview" method="POST">
+                    {% endif %}
+                    <label for="target-table">Zieltabelle des Joins:</label>
+                    <select id="target-table" name="target-table" required>
+                        <option value="table_1" name="target-table" selected>{{ db_name_1 + '.' + table_name_1 }}
+                        </option>
+                        <option value="table_2" name="target-table">{{ db_name_2 + '.' + table_name_2 }}</option>
+                    </select>
+                    <label for="attribute-selection">Verbinden über:</label>
+                    <select name="attribute-selection" id="attribute-selection" required>
+                        {% for key, val in comp_by_code|dictsort %}
+                        {% if key == 1 %}
+                        <optgroup label="vollständig kompatibel">
+                            {% elif key == 2 %}
+                        <optgroup label="ggf. uneindeutige Werte">
+                            {% elif key == 3 %}
+                        <optgroup label="ggf. Typkonversion nötig">
+                            {% elif key == 4 %}
+                        <optgroup label="Typkonversion nötig">
+                            {% elif key == 5 %}
+                        <optgroup label="ggf. Typkonversion nötig und ggf. uneindeutige Werte">
+                            {% elif key == 6 %}
+                        <optgroup label="Typkonversion nötig und ggf. uneindeutige Werte">
+                            {% endif %}
+                            {% for value in comp_by_code[key] %}
+                            <option value="{{ value[0] }}, {{ value[1] }}" name="{{ value[0] }}, {{ value[1] }}">{{
+                                db_name_1 + '.' + value[0]
+                                }}, {{ db_name_2 +
+                                '.' + value[1] }}
+                            </option>
+                            {% endfor %}
+                        </optgroup>
+                        {% endfor %}
+                    </select>
+                    <div class="cast-selection">
+                        Typkonversion erzwingen:
+                        <input type="radio" id="none" name="cast" value=0 checked required>
+                        <label for="none">Keine</label>
+                        <input type="radio" id="attribute1" name="cast" value=1 required>
+                        <label for="attribute1">Für {{ db_name_1 }}.{{ table_name_1 }}</label>
+                        <input type="radio" id="attribute2" name="cast" value=2 required>
+                        <label for="attribute2">Für {{ db_name_2 }}.{{ table_name_2 }}</label>
+                    </div>
+                    {% if mode == 'compare' %}
+                    <h4>Attribute, die für den Vergleich beibehalten werden sollen:</h4>
+                    Tabelle {{ table_name_1}}:
+                    <input type="checkbox" name="table1-all" id="table1-all" value="table1-all" checked>
+                    <label for="table1-all">Alle auswählen</label>
+                    {% for column in table_columns_1 %}
+                    <input type="checkbox" class="table1-box" name="columns-table1" id="{{ column }}"
+                        value="{{ column }}" checked>
+                    <label for="{{ column }}">{{ column }}</label>
+                    {% endfor %}<br>
+                    Tabelle {{ table_name_2}}:
+                    <input type="checkbox" name="table2-all" id="table2-all" value="table2-all" checked>
+                    <label for="table1-all">Alle auswählen</label>
+                    {% for column in table_columns_2 %}
+                    <input type="checkbox" class="table2-box" name="columns-table2" id="{{ column }}"
+                        value="{{ column }}" checked>
+                    <label for="{{ column }}">{{ column }}</label>
+                    {% endfor %}<br>
+                    <input type="submit" value="Tabellen vergleichen">
+                    {% elif mode == 'merge' %}
+                    <label for="target-column">Mit den neuen Werten auszufüllende Spalte der Zieltabelle
+                        (optional):</label>
+                    <select id="target-column" name="target-column">
+                        <option value="" name="Bitte auswählen:"></option>
+                    </select>
+                    <label for="source-column-to-insert">Zu übertragendes Attribut:</label>
+                    <select name="source-column-to-insert" id="source-column-to-insert" required></select>
+                    <label for="new-attribute-name">Neuer Name für das übertragene Attribut (nur, wenn keine Zielspalte
+                        ausgewählt wurde):</label>
+                    <input type="text" id="new-attribute-name" name="new-attribute-name" pattern="^[-\w]{4,}$">
+                    <input type="submit" value="Vorschau">
+                    {% endif %}
+
+                </form>
+        </div>
+        <div id="tables">
+            <div id="table1"></div>
+            <div id="table2"></div>
+        </div>
+    </div>
+    <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+    <script src="{{url_for('static', filename='showTable.js')}}"></script>
+    <script src="{{url_for('static', filename='confirmBack.js')}}"></script>
+    <script>
+        var columns1 = {{ table_columns_1 | tojson | safe }};
+        var data1 = {{ data_1 | tojson | safe }};
+        showTable(columns1, data1, 'table1');
+
+        var columns2 = {{ table_columns_2 | tojson | safe }};
+        var data2 = {{ data_2 | tojson | safe }};
+        showTable(columns2, data2, 'table2');
+
+        const backButton = document.getElementById('backButton')
+        backButton.addEventListener('click', function () {
+            confirmBack();
+        });
+
+        {% if mode == 'compare' %}
+        document.getElementById('table1-all').addEventListener('change', function () {
+            unSelectAll(this, '.table1-box');
+        });
+        document.getElementById('table2-all').addEventListener('change', function () {
+            unSelectAll(this, '.table2-box');
+        });
+
+
+        let checkboxes1 = document.querySelectorAll('.table1-box');
+        let checkboxes2 = document.querySelectorAll('.table2-box');
+        console.log(checkboxes1);
+
+        for (var i = 0; i < checkboxes1.length; i++) {
+            checkboxes1[i].addEventListener('change', function () {
+                updateBoxToCheckAll('table1-box', 'table1-all');
+            });
+        }
+        for (var j = 0; j < checkboxes2.length; j++) {
+            checkboxes2[j].addEventListener('change', function () {
+                updateBoxToCheckAll('table2-box', 'table2-all');
+            });
+        }
+        {% elif mode == 'merge' %}
+        const selectedTargetTable = document.getElementById('target-table');
+        const columnsTable1 = {{ table_columns_1 | tojson | safe }};
+        const columnsTable2 = {{ table_columns_2 | tojson | safe }};
+
+        const columnsWithoutPKs1 = {{ no_pk_columns_1 | tojson | safe }};
+        const columnsWithoutPKs2 = {{ no_pk_columns_2 | tojson | safe }};
+        fillAttributeDropDowns('source-column-to-insert', 'target-column', columnsTable1, columnsTable2, columnsWithoutPKs1, columnsWithoutPKs2);
+        selectedTargetTable.addEventListener('change', function () {
+            fillAttributeDropDowns('source-column-to-insert', 'target-column', columnsTable1, columnsTable2, columnsWithoutPKs1, columnsWithoutPKs2);
+        });
+        {% endif %}
+
+        function fillAttributeDropDowns(sourceSelectItemId, targetSelectItemId, options1, options2, noPKs1, noPKs2) {
+            let sourceSelect = document.getElementById(sourceSelectItemId);
+            let targetSelect = document.getElementById(targetSelectItemId);
+            const targetTable = document.getElementById('target-table').value;
+
+            let targetColumnsToChooseFrom;
+            let sourceColumnsToChooseFrom;
+            console.log(targetTable)
+            if (targetTable == 'table_1') {
+                sourceColumnsToChooseFrom = options2;
+                targetColumnsToChooseFrom = noPKs1;
+
+            } else if (targetTable == 'table_2') {
+                sourceColumnsToChooseFrom = options1;
+                targetColumnsToChooseFrom = noPKs2;
+            } else {
+                return false;
+            }
+            removeAllExceptFirst(targetSelect);
+            appendOptions(targetSelect, targetColumnsToChooseFrom)
+            removeAll(sourceSelect);
+            appendOptions(sourceSelect, sourceColumnsToChooseFrom)
+            return true;
+        }
+        /*https://www.javascripttutorial.net/javascript-dom/javascript-add-remove-options/*/
+        function removeAll(selectBox) {
+            while (selectBox.options.length > 0) {
+                selectBox.remove(0);
+            }
+        }
+
+        function removeAllExceptFirst(selectBox) {
+            while (selectBox.options.length > 1) {
+                selectBox.remove(1);
+            }
+        }
+
+
+        /* https://stackoverflow.com/questions/6601028/how-to-populate-the-options-of-a-select-element-in-javascript James Long */
+        function appendOptions(selectItem, optionsToChooseFrom) {
+            for (var i = 0; i < optionsToChooseFrom.length; i++) {
+                let option = document.createElement('option');
+                option.setAttribute('value', optionsToChooseFrom[i]);
+                option.appendChild(document.createTextNode(optionsToChooseFrom[i]));
+                selectItem.appendChild(option);
+            }
+        }
+
+        function unSelectAll(source, className) {
+            var checkboxes = document.querySelectorAll(className);
+            for (var i = 0; i < checkboxes.length; i++) {
+                checkboxes[i].checked = source.checked;
+            }
+        }
+
+        function updateBoxToCheckAll(className, checkAllId) {
+            const checkboxes = document.getElementsByClassName(className);
+            console.log(checkboxes);
+            let counter = 0;
+            let boxToCheckAll = document.getElementById(checkAllId);
+
+            for (let i = 0; i < checkboxes.length; i++) {
+                if (checkboxes[i].checked) {
+                    counter++;
+                }
+            }
+            console.log(counter)
+            if (counter == checkboxes.length) {
+                boxToCheckAll.checked = true;
+            } else if (counter < checkboxes.length) {
+                boxToCheckAll.checked = false;
+            }
+        }
+
+
+
+    </script>
+</body>
+
+</html>

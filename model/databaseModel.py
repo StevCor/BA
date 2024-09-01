@@ -301,7 +301,7 @@ def check_data_type_meta_data(engine:Engine, table_name:str):
         unique_list = []
         for entry in constraint_result:
             if entry[0] not in unique_list:
-                unique_list.append(entry[0])
+                unique_list.append([table_name, entry[0]])
     for row in result:
         print('ROW. ', row)
         column_name = row[0]

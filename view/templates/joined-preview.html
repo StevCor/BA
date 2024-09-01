@@ -20,17 +20,27 @@
         <div class="links">
             <button id="backButton">Zurück</button>
             <div class="tab">
-                <a href="{{ url_for('compare_two_dbs') }}" class="active">Tabellen vergleichen</a>
-                <a href="{{ url_for('merge_tables') }}">Tabellen verbinden</a>
+                <a href="{{ url_for('compare_two_tables') }}" {% if mode=='compare' %} class="active" {% endif
+                    %}>Tabellen
+                    vergleichen</a>
+                <a href="{{ url_for('merge_tables') }}" {% if mode=='merge' %} class="active" {% endif %}>Tabellen
+                    verbinden</a>
             </div>
         </div>
+        {% if mode == 'compare '%}
         <h4>Join der Tabellen {{ db_name_1 }}.{{ table_name_1 }} und {{ db_name_2 }}.{{ table_name_2 }}, verbunden über
             {{ table_name_1 }}.{{ join_attribute_1 }} und {{ table_name_2 }}.{{ join_attribute_2 }}</h4>
+        {% elif mode == 'merge' %}
+        <h4>Vorschau der Tabelle {{ db_name }}.{{ table_name }} mit dem neu eingefügten Attribut {{ new_column_name }}
+        </h4>
+        {% endif %}
         <div id="joined-table"></div>
 
-        {{ unmatched_rows[table_name_1] }} Tupel aus {{ db_name_1 }}.{{ table_name_1 }} und {{
-        unmatched_rows[table_name_2] }} Tupel aus {{ db_name_2 }}.{{ table_name_2 }} konnten keinem Tupel aus der
+        {% if mode == 'compare '%}
+        {{ unmatched_rows[0] }} Tupel aus {{ db_name_1 }}.{{ table_name_1 }} und {{
+        unmatched_rows[1] }} Tupel aus {{ db_name_2 }}.{{ table_name_2 }} konnten keinem Tupel aus der
         anderen Tabelle zugeordnet werden.
+        {% endif %}
 
     </div>
     <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
@@ -42,14 +52,10 @@
         showTable(columns, data, 'joined-table');
 
 
-        const backButton = document.getElementById('backButton')
+        let backButton = document.getElementById('backButton')
         backButton.addEventListener('click', function () {
             confirmBack();
         });
-
-
-
-
 
     </script>
 </body>

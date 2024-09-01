@@ -1,6 +1,9 @@
 from argparse import ArgumentError
 import re
+
+from sqlalchemy import Engine
 from ControllerClasses import TableMetaData
+from model.databaseModel import check_data_type_meta_data, get_primary_key_from_engine, get_row_count_from_engine
 from model.oneTableModel import check_data_type_and_constraint_compatibility
 
 # gibt eine ganze Zahl aus, je nach Status der Überprüfung
@@ -52,3 +55,8 @@ def check_validity_of_input_and_searched_value(table_meta_data:TableMetaData, in
             return 7
     else:
         return check_result
+    
+def update_TableMetaData_entries(table_meta_data:TableMetaData, engine:Engine, table_name:str):
+    table_meta_data.primary_keys = get_primary_key_from_engine(engine, table_name)
+    table_meta_data.data_type_info = check_data_type_meta_data(engine, table_name)
+    table_meta_data.total_row_count = get_row_count_from_engine(engine, table_name)
