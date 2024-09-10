@@ -2,18 +2,22 @@
 <html lang="de">
 
 <head>
-    <title>Registrierung</title>
-    {% include 'css.html' %}
-
+    <title>SQL-Datenbanken: Registrierung</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/login-register.css') }}">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.1/css/all.css">
 </head>
 
 <body>
     <div class="register">
         <h1>Registrierung</h1>
+        <!-- Links zum Login- bzw. Registrierungsformular -->
         <div class="links">
             <a href="{{ url_for('check_login') }}">Login</a>
             <a href="{{ url_for('register') }}" class="active">Registrierung</a>
         </div>
+        <!-- Registrierungsformular -->
         <form action="{{ '/register' }}" method="POST" autocomplete="off">
             <label for="username">
                 <i class="fa fa-user"></i>
@@ -22,11 +26,12 @@
             <label for="password">
                 <i class="fa fa-lock"></i>
             </label>
-            <!---https://stackoverflow.com/questions/48345922/reference-password-validation-->
+            <!--Das gewählte Passwort soll mindestens acht Zeichen lang sein und je einen Kleinbuchstaben, einen Großbuchstaben, eine Ziffer
+            und ein Sonderzeichen enthalten. Regulärer Ausdruck übernommen von https://stackoverflow.com/questions/48345922/reference-password-validation-->
             <input type="password" name="password" placeholder="Passwort" id="password"
                 pattern="^(?=\P{Ll}*\p{Ll})(?=\P{Lu}*\p{Lu})(?=\P{N}*\p{N})(?=[\p{L}\p{N}]*[^\p{L}\p{N}])[\s\S]{8,}$"
                 required>
-            <div class="msg">{{ message }}</div>
+            {% include "message.html" %}
             <input type="submit" value="Registrieren">
         </form>
     </div>

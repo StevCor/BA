@@ -2,17 +2,22 @@
 <html lang="de">
 
 <head>
-    <title>SQL-Datenbanken</title>
-    {% include 'css.html' %}
+    <title>SQL-Datenbanken: Login</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/login-register.css') }}">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.1/css/all.css">
 </head>
 
 <body>
     <div class="login">
         <h1>Login</h1>
+        <!-- Links zum Login- bzw. Registrierungsformular -->
         <div class="links">
             <a href="{{ url_for('check_login') }}" class="active">Login</a>
             <a href="{{ url_for('register') }}">Registrierung</a>
         </div>
+        <!-- Loginformular -->
         <form action="/login" method="POST">
             <label for="username">
                 <i class="fa fa-user"></i>
@@ -22,7 +27,7 @@
                 <i class="fa fa-lock"></i>
             </label>
             <input type="password" name="password" placeholder="Passwort" id="password" required>
-            <div class="msg">{{ message }}</div>
+            {% include "message.html" %}
             <input type="submit" value="Login">
         </form>
     </div>

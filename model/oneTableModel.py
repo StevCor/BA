@@ -77,7 +77,7 @@ def get_replacement_information(table_meta_data:TableMetaData, affected_attribut
     if len(affected_attributes) < 1:
         raise ArgumentError('Es muss mindestens ein Attribut angegeben sein, dessen Werte bearbeitet werden sollen.')
     elif len(affected_attributes) > 1:
-        unaltered_table = get_full_table_ordered_by_primary_key(engine, table_name, primary_keys, convert = False)
+        unaltered_table = get_full_table_ordered_by_primary_key(table_meta_data, convert = False)
         all_attributes = list(unaltered_table.keys())
         primary_key_indexes = []
         for index, key in enumerate(all_attributes):
@@ -290,7 +290,8 @@ def get_unique_values_for_attribute(table_meta_data:TableMetaData, attribute_to_
     if type(table_meta_data) != TableMetaData:
         raise ArgumentError(None, 'Der erste übergebene Parameter muss vom Typ TableMetaData sein.')
     engine = table_meta_data.engine
-    table_name = table_meta_data.table_name
+    table_name = convert_string_if_contains_capitals_or_spaces(table_meta_data.table_name, engine.dialect.name)
+    attribute_to_search = convert_string_if_contains_capitals_or_spaces(attribute_to_search, engine.dialect.name)
     query = text(f'SELECT DISTINCT {attribute_to_search}, COUNT(*) AS Eintragsanzahl FROM {table_name} GROUP BY {attribute_to_search}')
     return convert_result_to_list_of_lists(execute_sql_query(engine, query))
 
@@ -353,7 +354,7 @@ def check_data_type_and_constraint_compatibility(table_meta_data:TableMetaData, 
         raise error
     else:
         if len(result) == 0 or result == None:
-            return 4
+            return f'Der gesuchte Wert \'{old_value}\' kommt im Attribut {column_name} nicht vor.\n'
         condition_value = result[0][0]
 
         query = f'UPDATE {table_name} SET {column_name}'
@@ -465,40 +466,8 @@ def get_concatenated_string_for_matching(db_dialect:str, search_parameter_name:s
     
 def escape_string(db_dialect:str, string:str):
     if db_dialect == 'postgresql':
-        string = string.replace('%', '\%').replace('_', '\_').replace("'", "\'").replace('"', '\"').replace('\\', '\\\\')
+        string = string.replace('\\', '\\\\').replace('%', '\%').replace('_', '\_').replace("'", "\'").replace('"', '\"')
     elif db_dialect == 'mariadb':
-        string = string.replace('%', '\\%').replace('_', '\\_').replace("'", "\\'").replace('"', '\\"').replace('\\', '\\\\\\\\')
+        string = string.replace('\\', '\\\\\\\\').replace('%', '\%').replace('_', '\_').replace("'", "\'").replace('"', '\"')
+    print(string)
     return string
-    
-
-#### BISHER UNBENUTZT ###
-
-def replace_one_string(table_meta_data:TableMetaData, column_name:str, string_to_replace:str, replacement_string:str, primary_keys_and_values:dict):
-    engine = table_meta_data.engine
-    db_dialect = engine.dialect.name 
-    table_name = convert_string_if_contains_capitals_or_spaces(table_meta_data.table_name, db_dialect)
-    column_name = convert_string_if_contains_capitals_or_spaces(column_name, db_dialect)
-    if type(string_to_replace) == str:
-        string_to_replace = escape_string(db_dialect, string_to_replace)
-    if type(replacement_string) == str:
-        replacement_string = escape_string(db_dialect, replacement_string)
-    query = ''
-    condition = build_sql_condition(tuple(primary_keys_and_values.keys()), db_dialect, 'AND')
-    flag = ''
-    if db_dialect == 'postgresql': 
-        flag = ", 'g'"       
-    query = f"UPDATE {table_name} SET {column_name} = regexp_replace({column_name}, '{string_to_replace}', '{replacement_string}'{flag})"
-    print(query)
-    query = text(f'{query} {condition};')
-    for key in primary_keys_and_values.keys():
-        query.bindparams(bindparam(key))
-    try:
-        connection = engine.connect() 
-        connection.execute(query, primary_keys_and_values)
-    except:
-        connection.rollback()
-        raise UpdateError()
-    else:
-        connection.commit()
-    finally:
-        connection.close()

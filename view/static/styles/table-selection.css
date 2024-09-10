@@ -88,7 +88,7 @@ body {
 }
 
 .selecttable .buttons {
-    display: inline-flexbox;
+    display: inline-flex;
 }
 
 /*All modal-related stuff from https://www.w3schools.com/howto/tryit.asp?filename=tryhow_css_modal*/

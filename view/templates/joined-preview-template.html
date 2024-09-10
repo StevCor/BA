@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <title>SQL-Datenbanken{% block title %}{% endblock title %} </title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
+    <link rel="stylesheet" href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" />
+    <!--<link rel="stylesheet" href="{{ url_for('static', filename='styles/two-tables.css') }}">-->
+</head>
+
+
+<body>
+    <div class="connection">
+        <h3>Verbunden mit Datenbank {{ db_name_1 }} ({{ db_dialects[0] }}), Tabelle {{ table_name_1 }} und Datenbank
+            {{
+            db_name_2 }} ({{ db_dialects[1]}}), Tabelle {{ table_name_2 }}</h3>
+        <a href="{{ url_for('disconnect_from_single_db', engine_no = 3) }}"><button
+                id="disconnect">Datenbankverbindungen
+                trennen</button></a>
+    </div>
+    <div class="links">
+        <button id="back">Zurück</button>
+        <a href="{{ url_for('compare_two_tables') }}" {% block compare_active %}{% endblock compare_active %}>Tabellen
+            vergleichen</a>
+        <a href="{{ url_for('merge_tables') }}" {% block merge_active %}{% endblock merge_active %}>Tabellen
+            verbinden</a>
+    </div>
+    {% block table_title %}
+    {% endblock table_title %}
+    <div id="joined-table"></div>
+
+    {% block statistics_or_form %}
+    {% endblock statistics_or_form %}
+
+
+    <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+    <script src="{{url_for('static', filename='showTable.js')}}"></script>
+    <script src="{{url_for('static', filename='confirmBack.js')}}"></script>
+    <script>
+        var columns = {{ table_columns | tojson | safe }};
+        var data = {{ data | tojson | safe }};
+        showTable(columns, data, 'joined-table');
+
+
+        let backButton = document.getElementById('back')
+        backButton.addEventListener('click', function () {
+            confirmBack();
+        });
+
+    </script>
+</body>
+
+</html>

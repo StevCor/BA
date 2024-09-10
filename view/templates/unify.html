@@ -1,47 +1,21 @@
-<!DOCTYPE html>
-<html lang="de">
+{% extends "one-table-template.html" %}
+{% block title %}: Vereinheitlichen{% endblock %}
+{% block unify_active %} class="active" {% endblock unify_active %}
 
-<head>
-    <title>Vereinheitlichen</title>
-    {% include 'css.html' %}
-
-</head>
-
-<body>
-
-    <div class="unify">
-        <div class="connection">
-            <h3>Verbunden mit Datenbank {{ db_name }}, Tabelle {{ table_name }} </h3>
-            <a href="{{ url_for('disconnect_from_single_db') }}"><button
-                    onclick="return confirm('Sind Sie sicher? Sie kehren dann zur Anmeldeseite zurück.')"> Verbindung
-                    trennen </button></a>
-        </div>
-
-        <div class="links">
-            <a href="{{ url_for('search_entries') }}">Suchen</a>
-            <a href="{{ url_for('search_and_replace_entries') }}">Suchen und Ersetzen</a>
-            <a href="{{ url_for('unify_db_entries') }}" class="active">Vereinheitlichen</a>
-        </div>
-        <form action="{{ '/unify-selection' }}" method="POST">
-            <h4>Bitte wählen Sie die Spalte aus, deren Einträge vereinheitlicht werden sollen. Primärschlüssel können
-                hiermit nicht bearbeitet werden.</h4>
-            <label for="columntounify">Spalte auswählen:</label>
-            <select name="columntounify" id="columntounify" required>
-                {% for column in table_columns %}
-                {% if column not in primary_keys %}
-                <option value="{{ column }}">{{ column }}</option>
-                {% endif %}
-                {% endfor %}
-            </select>
-            <input type="hidden" id="engineno" name="engineno" value="{{ engine_no }}">
-            <input type="hidden" id="tablename" name="tablename" value="{{ table_name }}">
-            <input type="submit" value="Einträge überprüfen">
-        </form>
-
-        <div id="table"></div>
-    </div>
-    {% include 'grid.html' %}
-    <div class="msg">{{ message }}</div>
-</body>
-
-</html>
+{% block one_table_form %}
+<form action="{{ '/unify-selection' }}" method="POST">
+    <h4>Bitte wählen Sie die Spalte aus, deren Einträge vereinheitlicht werden sollen. Primärschlüssel können
+        hiermit nicht bearbeitet werden.</h4>
+    <label for="column-to-unify">Spalte auswählen:</label>
+    <select name="column-to-unify" id="column-to-unify" required>
+        {% for column in table_columns %}
+        {% if column not in primary_keys %}
+        <option value="{{ column }}">{{ column }}</option>
+        {% endif %}
+        {% endfor %}
+    </select>
+    <input type="hidden" id="engine-no" name="engine-no" value="{{ engine_no }}">
+    <input type="hidden" id="table-name" name="table-name" value="{{ table_name }}">
+    <input type="submit" value="Einträge überprüfen">
+</form>
+{% endblock one_table_form %}

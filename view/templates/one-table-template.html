@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SQL-Datenbanken{% block title %}
+        {% endblock title %}</title>
+    <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+    <!--<link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">-->
+
+</head>
+
+<body>
+    <input type="hidden" id="database-name" value="{{ db_name }}">
+
+    <div class="connection">
+        <h3>Verbunden mit Datenbank {{ db_name }}, Tabelle {{ table_name }} </h3>
+        <a href="{{ url_for('disconnect_from_db', engine_no = 1) }}"><button id="disconnect">Verbindung
+                trennen </button></a>
+    </div>
+
+    <div class="links">
+        <button id="back">Zurück</button>
+        <a href="{{ url_for('search_entries') }}" {% block search_active %} {% endblock search_active %}>Suchen</a>
+        <a href="{{ url_for('search_and_replace_entries') }}" {% block replace_active %} {% endblock %}>Suchen und
+            Ersetzen</a>
+        <a href="{{ url_for('unify_db_entries') }}" {% block unify_active %} {% endblock unify_active
+            %}>Vereinheitlichen</a>
+    </div>
+    {% block one_table_form %}
+    {% endblock one_table_form %}
+    <div id="table"></div>
+
+    {% include "message.html" %}
+
+    <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+    <script src="{{url_for('static', filename='showTable.js')}}"></script>
+    <script src="{{url_for('static', filename='confirmBack.js')}}"></script>
+    <script>
+        var columns = {{ table_columns | tojson | safe }};
+        var data = {{ data | tojson | safe }};
+        showTable(columns, data, 'table');
+
+        const disconnectButton = document.getElementById('disconnect');
+        disconnectButton.addEventListener('click', function () {
+            return confirm('Sind Sie sicher, dass Sie die Datenbankverbindung trennen wollen? Sie kehren dann zur Anmeldeseite zurück.');
+        });
+
+        const backButton = document.getElementById('back')
+        backButton.addEventListener('click', function () {
+            confirmBack();
+        });
+
+    </script>
+    {% block more_js %}
+    {% endblock more_js %}
+</body>
+
+</html>

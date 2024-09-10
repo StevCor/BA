@@ -1,7 +1,7 @@
 from argparse import ArgumentError
 from dateutil import parser
 from math import ceil
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine, bindparam, text
 from ControllerClasses import TableMetaData
 from model.CompatibilityClasses import MariaInt, PostgresInt, get_int_value_by_dialect_name, MariaToPostgresCompatibility, PostgresToMariaCompatibility
 from model.databaseModel import get_primary_key_from_engine, convert_result_to_list_of_lists, execute_sql_query, convert_string_if_contains_capitals_or_spaces
@@ -25,108 +25,140 @@ def join_tables_of_same_dialect_on_same_server(table_meta_data:list[TableMetaDat
     except Exception as error:
         raise error
     
-    
+    ### Vorbereitung der Namen der Datenbankbestandteile für eindeutigen Zugriff ###
+    # Versehen der Tabellennamen mit Trennzeichen, falls nötig
     table_1 = f'{convert_string_if_contains_capitals_or_spaces(table_meta_data[0].table_name, dialect_1)}'
     table_2 = f'{convert_string_if_contains_capitals_or_spaces(table_meta_data[1].table_name, dialect_2)}'
-    db_name_1 = None
-    db_name_2 = None
-    if table_meta_data[0].engine.url.database != table_meta_data[1].engine.url.database:
-        db_name_1 = table_meta_data[0].engine.url.database
-        db_name_2 = table_meta_data[1].engine.url.database
+    # Verbindung des Tabellennamens mit den ggf. mit Trennzeichen versehenen Join-Attributen zur eindeutigen Identifizierung
     join_attribute_1 = f'{table_1}.{convert_string_if_contains_capitals_or_spaces(attributes_to_join_on[0], dialect_1)}'
     join_attribute_2 = f'{table_2}.{convert_string_if_contains_capitals_or_spaces(attributes_to_join_on[1], dialect_2)}'
     
-
-    if attributes_to_join_on[0] in attributes_to_select_1 and attributes_to_join_on[1] in attributes_to_select_2:
-        attributes_to_select_2.pop(attributes_to_select_2.index(attributes_to_join_on[1]))
+    db_name_1 = None
+    db_name_2 = None
+    # Liegen die Tabellen in zwei Datenbanken, werden zudem deren Namen für die eindeutige Tabellenidentifizierung benötigt. 
+    if table_meta_data[0].engine.url.database != table_meta_data[1].engine.url.database:
+        db_name_1 = table_meta_data[0].engine.url.database
+        db_name_2 = table_meta_data[1].engine.url.database
+    
+    
+    ### Festlegen der auszuwählenden Attribute für den Join ###
+    # Trennzeichen, das zwischen die Attribute der ersten und der zweiten Tabelle gesetzt wird
     delimiter = ','
+    # Falls aus der ersten Tabelle keine Attribute ausgewählt wurden, ...
     if len(attributes_to_select_1) == 0:
+        # ... wird es auf einen leeren String gesetzt, ...
         delimiter = ''
+        # ... ebenso wie die Auflistung der Attribute aus der ersten Tabelle.
         attributes_table_1 = ''
     else:
+        # Anderenfalls werden die Attribute durch Kommas getrennt aufgelistet.
         attributes_table_1 = list_attributes_to_select(attributes_to_select_1, dialect_1, table_1, db_name_1)
+    # Falls aus der ersten Tabelle keine Attribute ausgewählt wurden, ...
     if len(attributes_to_select_2) == 0:
+        # ... wird das Trennzeichen ebenfalls auf einen leeren String gesetzt.
         delimiter = ''
-        
+    # Anlegen der Anfrage für den Join
     join_query = f'SELECT {attributes_table_1}{delimiter}'
+    # Wenn Attribute aus der zweiten Tabelle angezeigt werden sollen, ...
     if len(attributes_to_select_2) > 0:
+        # ... werden diese analog zu den Attributen der ersten Tabelle aufgelistet ...
         attributes_table_2 = list_attributes_to_select(attributes_to_select_2, dialect_2, table_2, db_name_2)
+        # ... und der Anfrage angehängt.
         join_query = f'{join_query} {attributes_table_2}'
     
+    ### Typkonversion ###
+    # Anlegen der Variablen für die Beurteilung, ob eine Typkonversion nötig ist
     data_type_group_1 = table_meta_data[0].get_data_type_group(attributes_to_join_on[0])
     data_type_group_2 = table_meta_data[1].get_data_type_group(attributes_to_join_on[1])
     data_type_1 = table_meta_data[0].get_data_type(attributes_to_join_on[0])
     data_type_2 = table_meta_data[0].get_data_type(attributes_to_join_on[1])
-
+    # Standardmäßige, sinnvoll erscheinende Typkonversion, die durchgeführt wird, wenn keine Umwandlung erzwungen werden soll
     if cast_direction == 0:
+        # Wenn das Join-Attribut der ersten Tabelle vom Typ Boolean ist ...
         if data_type_group_1 == 'boolean':
+            # ... und jenes der zweiten Tabelle eine Zahl oder textbasiert, ...
             if data_type_group_2 == 'integer' or data_type_group_2 == 'decimal' or data_type_group_2 == 'text':
+                # ... wird das Attribut der ersten Tabelle in den Datentyp des Attributs der zweiten Tabelle konvertiert.
                 cast_direction = 1
+        # Wenn das Join-Attribut der ersten Tabelle eine ganze Zahl ist ...
         elif data_type_group_1 == 'integer':
+            # ... und jenes der zweiten Tabelle vom Typ Boolean, ...
             if data_type_group_2 == 'boolean':
+                # ... wird das Attribut der zweiten Tabelle in eine ganze Zahl konvertiert.
                 cast_direction = 2
+            # Falls das Join-Attribut der zweiten Tabelle textbasiert ist, ...
             elif data_type_group_2 == 'text':
+                # ... wird das Attribut der ersten Tabelle in Text konvertiert.
                 cast_direction = 1
+        # Kommazahlen im ersten Join-Attribut ...
         elif data_type_group_1 == 'decimal':
+            # ... werden nur bei textbasierten Join-Attributen der zweiten Tabelle in Text konvertiert.
             if data_type_group_2 == 'text':
                 cast_direction = 1
+        # Ist der Datentyp des ersten Join-Attributs textbasiert, ...
         elif data_type_group_1 == 'text':
+            # ... wird das Join-Attribut der zweiten Tabelle unabhängig von seinem Datentyp ebenfalls in Text konvertiert.
             cast_direction = 2
+        # Ist das Join-Attribut der ersten Tabelle ein Datum, ...
         elif data_type_group_1 == 'date':
+            # ... wird es nur konvertiert, wenn das Join-Attribut der zweiten Tabelle textbasiert ist.
             if data_type_group_2 == 'text':
-                cast_direction = 1
+                cast_direction = 1,
     
+    # Wenn eine Typkonversion für das Join-Attribut der ersten Tabelle erzwungen werden soll oder cast_direction in der obigen Überprüfung auf 
+    # 1 gesetzt wurde, ...
     if cast_direction == 1:
+        # ... wird das Join-Attribut der ersten Tabelle in der Anfrage in den Datentyp des zweiten Join-Attributs konvertiert.
         join_attribute_1 = f'CAST ({join_attribute_1} AS {data_type_2})'
+    # Wurde cast_direction auf 2 gesetzt, gilt entsprechend der umgekehrte Fall.
     elif cast_direction == 2:
         join_attribute_2 = f'CAST ({join_attribute_2} AS {data_type_1})'
 
-
-    
+    ### Ausführung des Joins ###
+    # Erstellung der Anfrage für einen Full Outer Join, falls gewünscht 
     if full_outer_join:
         if dialect_1 == 'mariadb':
-            join_query = f'{join_query} FROM {table_1} LEFT JOIN {table_2} ON {join_attribute_1} = {join_attribute_2} UNION ({join_query} FROM {table_1} RIGHT JOIN {table_2} ON {join_attribute_1} = {join_attribute_2})'
-
-        
+            # Für MariaDB wird hierfür die Vereinigungsmenge zwischen einem Left Outer Join und einem Right Outer Join jeweils auf den beiden Join-Attributen gebildet.
+            join_query = f'{join_query} FROM {table_1} LEFT OUTER JOIN {table_2} ON {join_attribute_1} = {join_attribute_2} UNION ({join_query} FROM {table_1} RIGHT OUTER JOIN {table_2} ON {join_attribute_1} = {join_attribute_2})'
         elif dialect_1 == 'postgresql':
-            join_query = f'{join_query} FROM {table_1} FULL OUTER JOIN {table_2} ON {join_attribute_1} = {join_attribute_2}'
-            filter_count_table_1 = f'{table_2}.{convert_string_if_contains_capitals_or_spaces(table_meta_data[1].primary_keys[0], dialect_2)}'
-            filter_count_table_2 = f'{table_1}.{convert_string_if_contains_capitals_or_spaces(table_meta_data[0].primary_keys[0], dialect_1)}'
-            count_query = f'SELECT COUNT(*) FILTER (WHERE {filter_count_table_1} IS NULL), COUNT(*) FILTER (WHERE {filter_count_table_2} IS NULL) FROM {table_1} FULL JOIN {table_2} ON {join_attribute_1} = {join_attribute_2}'
-            count_result = execute_sql_query(engine_1, text(count_query))
-            counts = list(count_result.fetchone())     
+            # Für PostgreSQL kann das Schlüsselwort 'FULL OUTER JOIN' genutzt werden.
+            join_query = f'{join_query} FROM {table_1} FULL OUTER JOIN {table_2} ON {join_attribute_1} = {join_attribute_2}'    
     else:
-        if dialect_1 == 'mariadb' or dialect_1 == 'postgresql':
-            join_query = f'{join_query} FROM {table_1} INNER JOIN {table_2} ON {join_attribute_1} = {join_attribute_2}'
-
+        # Wenn ein Inner Join gewünscht ist, kann für MariaDB und PostgreSQL dieselbe Anfrage verwendet werden.
+        join_query = f'{join_query} FROM {table_1} INNER JOIN {table_2} ON {join_attribute_1} = {join_attribute_2}'
+    # Ausführen des Joins
     joined_table_result = convert_result_to_list_of_lists(execute_sql_query(engine_1, text(join_query), raise_exceptions = True))
+
+    ### Ermittlung der Attributnamen für die Anzeige ###
+    # Für die Vergleichsfunktion ist es sinnvoll, den Spaltennamen die Tabellennamen voranzustellen, um sie bei gleichen Namen richtig zuordnen zu können.
     if add_table_names_to_column_names:
         column_names_for_display = [table_1 + '.' + col_1 for col_1 in attributes_to_select_1] + [table_2 + '.' + col_2 for col_2 in attributes_to_select_2]
     else:
+        # Anderenfalls (d. h. für die Verbindungsfunktion) werden die Auswahlattribute lediglich zu einer Liste zusammengefügt.
         column_names_for_display = attributes_to_select_1 + attributes_to_select_2
-    no_of_unmatched_rows = {table_1: 0, table_2: 0}
-    condition_attributes = [attributes_to_select_1, attributes_to_select_2]
-    tables = [table_1, table_2] 
-    db_names = [db_name_1, db_name_2]
-    dialects = [dialect_1, dialect_2]
-    join_attributes = [join_attribute_1, join_attribute_2]
-    for index, table in enumerate(tables):
-        select_all_from_table = list_attributes_to_select(condition_attributes[index], dialects[index], table, db_names[index])
-        if index == 0:
-            direction = 'LEFT'
-        else:
-            direction = 'RIGHT'
-        unmatched_rows_query = f'SELECT {select_all_from_table} FROM {table_1} {direction} OUTER JOIN {table_2} ON {join_attribute_1} = {join_attribute_2}'
-        condition = f'WHERE {join_attributes[(index + 1) % 2]} IS NULL'
-        unmatched_rows_query = f'{unmatched_rows_query} {condition}'
-        no_of_unmatched_rows[tables[index]] = len(convert_result_to_list_of_lists(execute_sql_query(table_meta_data[index].engine, text(unmatched_rows_query), raise_exceptions = True)))
-    # Falls der Parameter für nachfolgende Funktionen (merge_two_tables) gebraucht wird, ...
+
+    ### Ermittlung der Anzahl der Tupel, denen keines aus der anderen Tabelle zugeordnet werden kann ###
+    unmatched_rows_query = ''
+    if dialect_1 == 'mariadb':
+        # Für MariaDB erfordert dies zwei Unterabfragen, damit die Zählung anhand zweier Kriterien erfolgen kann.
+        unmatched_rows_query = f'SELECT (SELECT COUNT(*) FROM ({table_1} LEFT OUTER JOIN {table_2} ON {join_attribute_1} = {join_attribute_2}) WHERE {join_attribute_2} IS NULL), (SELECT COUNT(*) FROM ({table_1} RIGHT JOIN {table_2} ON {join_attribute_1} = {join_attribute_2}) WHERE {join_attribute_1} IS NULL);'
+    elif dialect_1 == 'postgresql':
+        # Für PostgreSQL kann dies mithilfe der Funktion FILTER innerhalb eines Full Outer Join erfolgen.
+        # Als Filterattribut werden die Primärschlüssel verwendet, da diese in PostgreSQL-Datenbanken nicht NULL sein dürfen.
+        filter_count_table_1 = f'{table_2}.{convert_string_if_contains_capitals_or_spaces(table_meta_data[1].primary_keys[0], dialect_2)}'
+        filter_count_table_2 = f'{table_1}.{convert_string_if_contains_capitals_or_spaces(table_meta_data[0].primary_keys[0], dialect_1)}'
+        unmatched_rows_query = f'SELECT COUNT(*) FILTER (WHERE {filter_count_table_1} IS NULL), COUNT(*) FILTER (WHERE {filter_count_table_2} IS NULL) FROM {table_1} FULL OUTER JOIN {table_2} ON {join_attribute_1} = {join_attribute_2}'
+    # Ausführen der Abfrage und Listenumwandlung des Ergebnisses, das nur aus einem Tupel besteht   
+    no_of_unmatched_rows = list(execute_sql_query(engine_1, text(unmatched_rows_query)).fetchone())
+    
+    
+    ### Ausgabe des Ergebnisses ###
+    # Falls der Parameter cast_direction für nachfolgende Funktionen (merge_two_tables) gebraucht wird, ...
     if return_cast_direction:
         # ... gebe die Ergebnistabelle, die Spaltennamen, die Liste der Zähler mit nicht zugeordneten Tupeln beider Tabellen und den aktuellen Wert von cast_direction zurück.
         return joined_table_result, column_names_for_display, no_of_unmatched_rows, cast_direction
-    # Anderenfalls ...
     else:
-        # ... gebe nur die Ergebnistabelle, die Spaltennamen und die Liste der Zähler mit nicht zugeordneten Tupeln beider Tabellen zurück.
+        # Anderenfalls gebe nur die Ergebnistabelle, die Spaltennamen und die Liste der Zähler mit nicht zugeordneten Tupeln beider Tabellen zurück.
         return joined_table_result, column_names_for_display, no_of_unmatched_rows
     
 def join_tables_of_different_dialects_dbs_or_servers(table_meta_data:list[TableMetaData], attributes_to_join_on:list[str], attributes_to_select_1:list[str], attributes_to_select_2:list[str], cast_direction:int = None, full_outer_join:bool = False, add_table_names_to_column_names:bool = True):
@@ -157,21 +189,25 @@ def join_tables_of_different_dialects_dbs_or_servers(table_meta_data:list[TableM
         # Speichern des jeweiligen Join-Attributs mit Escaping
         join_attributes.append(convert_string_if_contains_capitals_or_spaces(attributes_to_join_on[index], engine.dialect.name))
         # Auflistung der auszuwählenden Attribute für die Abfrage
-        selection = ', '.join(attributes_to_select[index])
+        selection = ''
+        for attribute in attributes_to_select[index]:
+            if selection == '':
+                selection = f'{convert_string_if_contains_capitals_or_spaces(attribute, engine.dialect.name)}'
+            else:
+                selection = f'{selection}, {convert_string_if_contains_capitals_or_spaces(attribute, engine.dialect.name)}'
         # Wenn sich das Join-Attribut der jeweiligen Tabelle nicht in der zugehörigen Liste der auszuwählenden Spalten befindet ...
         if join_attributes[index] not in attributes_to_select[index]:
-            # ... hänge es hinten an, da es für die manuelle Ausführung des Joins benötigt wird, ...
-            selection = f'{selection}, {join_attributes[index]}'
-            # ... und setze den Boolean-Wert für diese Tabelle in join_attribute_added auf True
+            # ... wird es hinten angehängt, da es für die manuelle Ausführung des Joins benötigt wird, ...
+            selection = f'{selection}, {convert_string_if_contains_capitals_or_spaces(join_attributes[index], engine.dialect.name)}'
+            # ... und der Boolean-Wert für diese Tabelle in join_attribute_added wird auf True gesetzt.
             join_attribute_added[index] = True
-        # Erstelle die Datenbankabfrage ...
+        # Erstellen der Datenbankabfrage ...
         query = f'SELECT {selection} FROM {convert_string_if_contains_capitals_or_spaces(tables[index], engine.dialect.name)}'
-        print(query)
-        # ... und führe sie mit Ausgabe von Fehlermeldungen aus, die auf dem Server abgefangen werden.
+        # ... und Ausführung mit Ausgabe von Fehlermeldungen, die auf dem Server abgefangen werden.
         result = execute_sql_query(engine, text(query), raise_exceptions = True)
-        # Übernehme die Spaltennamen des Abfrageergebnisses als Liste ...
+        # Kopieren der Spaltennamen des Abfrageergebnisses als Liste ...
         result_columns.append(list(result.keys()))
-        # ... und trage das Abfrageergebnis als Liste von Listen in das Dictionary results ein, damit mehrfach über die Ergebniszeilen iteriert
+        # ... und Eintragen des Abfrageergebnisses als Liste von Listen in das Dictionary results ein, damit mehrfach über die Ergebniszeilen iteriert
         # werden kann.
         results.append(convert_result_to_list_of_lists(result))
 
@@ -180,9 +216,7 @@ def join_tables_of_different_dialects_dbs_or_servers(table_meta_data:list[TableM
     data_type_group_2 = table_meta_data_2.get_data_type_group(attributes_to_join_on[1])
     # ... und ihrer Position in der Liste der Spaltennamen des Abfrageergebnisses
     join_attribute_index_1 = result_columns[0].index(attributes_to_join_on[0])
-    print('JAI 1: ', join_attribute_index_1)
     join_attribute_index_2 = result_columns[1].index(attributes_to_join_on[1])
-    print('JAI 2: ', join_attribute_index_2)
     # Anlegen einer Liste zur Speicherung der verbundenen Tabelle
     joined_table = []
     # Anlegen einer Liste mit Übereinstimmungszählern für jedes Tupel in Tabelle 2; für die Erstellung eines Full Outer Joins
@@ -192,17 +226,15 @@ def join_tables_of_different_dialects_dbs_or_servers(table_meta_data:list[TableM
     no_of_unmatched_rows = [0, 0]
     # Iteriere die Tupel der ersten Tabelle durch ...
     for row_1_index, row_1 in enumerate(results[0]):
-        print('row_1: ', row_1)
         # ... und setze ihren Übereinstimmungszähler auf 0.
         match_counter_row_1 = 0
         # Beginne die Überprüfung der Übereinstimmung des aktuellen Tupels der ersten Tabelle mit den einzelnen Tupeln der zweiten Tabelle.
         for row_2_index, row_2 in enumerate(results[1]):
-            print('row_2: ', row_2)
             # Boolean-Wert, der wiedergibt, ob die beiden aktuellen Tupel überstimmen oder nicht; hiervon hängt ab, ob die Tupel in die zurück-
             # gegebene Ergebnistabelle aufgenommen werden oder nicht.
             is_match = False
             # Gemäß den üblichen SQL-Regeln werden NULL-Werte (bzw. None in Python) aus der Übereinstimmungsüberprüfung ausgeschlossen.
-            if row_1[join_attribute_index_1] != None and row_2[join_attribute_index_2] != None:
+            if row_1[join_attribute_index_1] is not None and row_2[join_attribute_index_2] is not None:
                 # Stimmen die Join-Attribute direkt (d. h. ohne Typkonversion) überein, ...
                 if row_1[join_attribute_index_1] == row_2[join_attribute_index_2]:
                     # ... setze den Boolean-Wert hierfür auf True.
@@ -234,10 +266,8 @@ def join_tables_of_different_dialects_dbs_or_servers(table_meta_data:list[TableM
                         try:
                             # ... überprüfe, ob der in eine ganze Zahl konvertierte Boolean-Wert mit dem Wert aus der zweiten Tabelle übereinstimmt.
                             if int(row_1[join_attribute_index_1]) == row_2[join_attribute_index_2]:
-                                # Trifft dies zu, speichere es in is_match ...
+                                # Trifft dies zu, speichere die Übereinstimmung in is_match.
                                 is_match = True
-                                # ... und übernehme den konvertierten Wert für die Übertragung in die Ergebnistabelle.
-                                row_1[join_attribute_index_1] = int(row_1[join_attribute_index_1])
                         # Tritt bei der Konversion hingegen ein Fehler auf, ...
                         except ValueError:
                             # ... liegt keine Übereinstimmung vor.
@@ -249,7 +279,6 @@ def join_tables_of_different_dialects_dbs_or_servers(table_meta_data:list[TableM
                             # ... wird versucht, den Boolean-Wert in eine Dezimalzahl zu konvertieren.
                             if float(row_1[join_attribute_index_1]) == row_2[join_attribute_index_2]:
                                 is_match = True
-                                row_1[join_attribute_index_1] = float(row_1[join_attribute_index_1])
                         except ValueError:
                             is_match = False
                     # Ist das Attribut der zweiten Tabelle textbasiert, ...
@@ -258,7 +287,6 @@ def join_tables_of_different_dialects_dbs_or_servers(table_meta_data:list[TableM
                             # ... wird der Boolean-Wert in Text zu konvertieren versucht.
                             if str(row_1[join_attribute_index_1]) == row_2[join_attribute_index_2]:
                                 is_match = True
-                                row_1[join_attribute_index_1] = str(row_1[join_attribute_index_1])
                         except ValueError:
                             is_match = False
                 # Ist das Join-Attribut aus der ersten Tabelle hingegen eine ganze Zahl ...
@@ -269,7 +297,6 @@ def join_tables_of_different_dialects_dbs_or_servers(table_meta_data:list[TableM
                             # ... wird der Wert aus der zweiten Tabelle zu konvertieren versucht.
                             if row_1[join_attribute_index_1] == int(row_2[join_attribute_index_2]):
                                 is_match = True
-                                row_2[join_attribute_index_2] = int(row_2[join_attribute_index_2])
                         except ValueError:
                             is_match = False
                     # Ist das Join-Attribut der zweiten Tabelle textbasiert, ...
@@ -278,7 +305,6 @@ def join_tables_of_different_dialects_dbs_or_servers(table_meta_data:list[TableM
                             # ... wird versucht, den Wert aus der ersten Tabelle in einen String zu konvertieren.
                             if str(row_1[join_attribute_index_1]) == row_2[join_attribute_index_2]:
                                 is_match = True
-                                row_1[join_attribute_index_1] = str(row_1[join_attribute_index_1])
                         except ValueError:
                             is_match = False
                 # Ist das Join-Attribut der ersten Tabelle eine Dezimalzahl ...
@@ -289,7 +315,6 @@ def join_tables_of_different_dialects_dbs_or_servers(table_meta_data:list[TableM
                             # ... wird der Wert aus der zweiten Tabelle in eine Dezimalzahl zu konvertieren versucht.
                             if row_1[join_attribute_index_1] == float(row_2[join_attribute_index_2]):
                                 is_match = True
-                                row_2[join_attribute_index_2] = float(row_2[join_attribute_index_2])
                         except ValueError:
                             is_match = False
                     # Ist das Join-Attribut der zweiten Tabelle textbasiert, ...
@@ -298,7 +323,6 @@ def join_tables_of_different_dialects_dbs_or_servers(table_meta_data:list[TableM
                             # ... wird versucht, den Wert aus der ersten Tabelle in einen String zu konvertieren.
                             if str(row_1[join_attribute_index_1]) == row_2[join_attribute_index_2]:
                                 is_match = True
-                                row_1[join_attribute_index_1] = str(row_1[join_attribute_index_1])
                         except ValueError:
                             is_match = False
                 # Ist das Join-Attribut der ersten Tabelle textbasiert, ...
@@ -307,7 +331,6 @@ def join_tables_of_different_dialects_dbs_or_servers(table_meta_data:list[TableM
                         # ... wird unabhängig von seinem Datentyp versucht, das Join-Attribut der zweiten Tabelle in einen String zu konvertieren.
                         if row_1[join_attribute_index_1] == str(row_2[join_attribute_index_2]):
                             is_match = True
-                            row_2[join_attribute_index_2] = str(row_2[join_attribute_index_2])
                     except ValueError:
                         is_match = False
                 # Für Join-Attribute der ersten Tabelle mit einem Datumsdatentyp ...
@@ -317,7 +340,6 @@ def join_tables_of_different_dialects_dbs_or_servers(table_meta_data:list[TableM
                         try:
                             if str(row_1[join_attribute_index_1]) == row_2[join_attribute_index_2]:
                                 is_match = True
-                                row_1[join_attribute_index_1] = str(row_1[join_attribute_index_1])
                         except ValueError:
                             is_match = False
             # Erstelle eine Kopie des aktuellen Tupels der ersten Tabelle, damit diese bearbeitet werden kann, ohne das Ergebnis der nächsten Iteration
@@ -449,7 +471,7 @@ def force_cast_and_match(data_type_group_1:str, data_type_group_2:str, values_to
 """Führt einen Join zweier Tabellen über zwei Attribute aus und fügt die Werte eines ausgewählten Attributes in eine bestehende oder neu erstellte Spalte der Zieltabelle ein.
 
 Gibt einen ArgumentError aus, wenn die Parameter ungeeignet sind oder die Attributnamen nicht korrekt zugeordnet werden können."""
-def merge_two_tables(target_table_data:TableMetaData, source_table_data:TableMetaData, attributes_to_join_on:list[str], source_attribute_to_insert:str, target_column:str|None, cast_direction:int, new_attribute_name:str|None, commit:bool = False, add_table_names_to_column_names:bool = True):
+def simulate_merge_and_build_query(target_table_data:TableMetaData, source_table_data:TableMetaData, attributes_to_join_on:list[str], source_attribute_to_insert:str, target_column:str|None, cast_direction:int, new_attribute_name:str|None, add_table_names_to_column_names:bool = True):
     ### Überprüfung, ob die übergebenen Argumente die erwartete Form und die erwarteten Inhalte haben ###
     if type(target_table_data) != TableMetaData or type(source_table_data) != TableMetaData:
         raise ArgumentError(None, 'Die Parameter target_table_data und source_table_data müssen vom Typ TableMetaData sein.')
@@ -461,6 +483,8 @@ def merge_two_tables(target_table_data:TableMetaData, source_table_data:TableMet
         raise ArgumentError(None, 'Der Parameter cast_direction darf nur die Werte 0, 1 oder 2 annehmen.')
     if new_attribute_name is not None and new_attribute_name in target_table_data.columns:
         raise ArgumentError(None, 'In der Zieltabelle darf keine Spalten mit dem neuen Spaltennamen existieren.')
+    if new_attribute_name is None and target_column is None and source_attribute_to_insert in target_table_data.columns:
+        raise ArgumentError(None, 'Wenn eine neue Spalte angelegt werden soll und hierfür kein neuer Name angegeben ist, darf die Zieltabelle keine Spalte mit dem Namen des Quellattributs haben.')
     if target_column is not None and (new_attribute_name is not None and new_attribute_name.strip() != ''):
         raise ArgumentError(None, 'Wenn eine existierende Spalte als Ziel der Operation angegeben ist, kann hierfür kein neuer Name gewählt werden.')
     if attributes_to_join_on[0] not in target_table_data.columns or attributes_to_join_on[1] not in source_table_data.columns:
@@ -545,7 +569,7 @@ def merge_two_tables(target_table_data:TableMetaData, source_table_data:TableMet
                     raise MergeError(f'Die Datentypen {target_data_type} und {source_data_type} der Ziel- und der Quelltabelle sind nicht kompatibel.')
                 else:
                     target_data_type = PostgresToMariaCompatibility.data_types[source_data_type]
-            # Lege ein Dictionary für die Metadaten des Datentyps des Zielattributs an, ...
+            # Lege ein Dictionary für die Metadaten des Zielattributdatentyps an, ...
             target_data_type_info = {}
             # ... übernehme die Datentypgruppe des Quellattributs, da diese übereinstimmen muss, ...
             target_data_type_info['data_type_group'] = source_data_type_group
@@ -567,6 +591,7 @@ def merge_two_tables(target_table_data:TableMetaData, source_table_data:TableMet
         # Das Zielattribut für die Update-Anweisung entspricht in diesem Fall dem Namen für die neu anzulegende Spalte.
         target_attribute = escaped_new_column_name
     
+    ### Erstellen der SQL-Abfrage für die Aktualisierung der Zieltabelle ###
     # Anlegen der Variablen mit den Informationen für die Update-Anweisung für bessere Lesbarkeit
     source_db = convert_string_if_contains_capitals_or_spaces(source_engine.url.database, source_dialect)
     source_table = convert_string_if_contains_capitals_or_spaces(source_table_data.table_name, source_dialect)
@@ -578,8 +603,10 @@ def merge_two_tables(target_table_data:TableMetaData, source_table_data:TableMet
     target_table = convert_string_if_contains_capitals_or_spaces(target_table, target_dialect)
     target_join_attribute = convert_string_if_contains_capitals_or_spaces(attributes_to_join_on[0], target_dialect)
     target_join_attribute_data_type = target_table_data.get_data_type(attributes_to_join_on[0])
+
+    # Anlegen des Parameter-Dictionarys für die UPDATE-Anweisung
+    params = {}
     
-    ### Erstellen der SQL-Abfrage für die Aktualisierung der Zieltabelle ###
     update_query = None
     ### Für PostgreSQL-Tabellen derselben Datenbank ###
     if source_engine.url == target_engine.url and target_dialect == 'postgresql':
@@ -635,60 +662,64 @@ def merge_two_tables(target_table_data:TableMetaData, source_table_data:TableMet
         # Außerdem wird die Position des Quellattributs im Join-Ergebnis benötigt.
         source_attribute_index = joined_column_names.index(source_attribute_to_insert)
         
-        # Nun wird die Update-Anweisung erstellt, mit einer Case-Anweisung ...        
-        update_query = f'UPDATE {target_table} SET {target_attribute} = CASE'
-        # ... für jedes Tupel des Joins.
+
+        target_attribute = convert_string_if_contains_capitals_or_spaces(target_attribute, target_dialect)
+        target_table = convert_string_if_contains_capitals_or_spaces(target_table, target_dialect)
+        # Nun wird die Update-Anweisung erstellt, mit einer Case-Anweisung für jedes Tupel des Joins.     
+        update_query = f'UPDATE {target_table} SET {target_attribute} ='
+        # Dabei werden die Werte gezählt, die nicht den Wert 'NULL' haben.
+        not_null_counter =  0
         for row in joined_result:
-            condition = f'WHEN'
-            # Diese werden jeweils über ihre Primärschlüsselwerte identifiziert.
-            for pk_index, key in enumerate(escaped_pk_columns):
-                # Falls die Tabelle mehr als ein Primärschlüsselattribut hat und es sich nicht um das erste handelt, ...
-                if pk_index != 0:
-                    # ... werden die Bedingungen für Primärschlüsselwerte mit AND verknüpft.
-                    condition = f'{condition} AND'
-                condition = f'{condition} {key} = {row[pk_index]}'
-            # Da die Ergebnisse des Joins bisher lediglich Python-basiert auf den Zieldatentyp abgestimmt wurden, wird der Wert für das Zielattribut sicherheitshalber noch einmal in den entsprechenden SQL-Datentyp konvertiert.
-            update_query = f'{update_query} {condition} THEN CAST({row[source_attribute_index]} AS {target_data_type})'
-        # Die Case-Anweisung wird damit abgeschlossen, dass alle Einträge des Zielattributs ohne Wert in der Quelltabelle auf NULL gesetzt werden.
-        update_query = f'{update_query} ELSE NULL END'
+            # Falls der einzutragende Wert 'None' lautet, wird dies mit der abschließenden Bedingung 'ELSE DEFAULT' abgefangen.
+            if row[source_attribute_index] is None:
+                # Somit kann diese Iteration der Schleife übersprungen werden.
+                continue
+            # Für andere Werte als 'NULL' wird eine Case-Bedingung...
+            else:
+                # ... begonnen, wenn es der erste Nicht-NULL-Wert ist, ...
+                if not_null_counter == 0:
+                    condition = 'CASE WHEN'
+                # ... und anderenfalls weitergeführt.
+                else:
+                    condition = f'WHEN'
+                # Zähler für Nicht-NULL-Werte erhöhen
+                not_null_counter += 1
+                # Die einzutragenden Werte werden jeweils über die Primärschlüsselwerte des Tupels identifiziert.
+                for pk_index, key in enumerate(escaped_pk_columns):
+                    # Falls die Tabelle mehr als ein Primärschlüsselattribut hat und es sich nicht um das erste handelt, ...
+                    if pk_index != 0:
+                        # ... werden die Bedingungen für Primärschlüsselwerte mit AND verknüpft.
+                        condition = f'{condition} AND'
+                    condition = f'{condition} {key} = {row[pk_index]}'
+                params['value_' + str(not_null_counter)] = row[source_attribute_index]
+                update_query = f"{update_query} {condition} THEN :{'value_' + str(not_null_counter)}"
+        # Wenn mindestens einer der einzutragenden Werte nicht 'NULL' ist, ...
+        if not_null_counter > 0:
+            # ... wird die Case-Anweisung damit abgeschlossen, dass alle Einträge des Zielattributs ohne Wert in der Quelltabelle auf den Standardwert gesetzt werden.
+            update_query = f'{update_query} ELSE DEFAULT END;'
+        # Anderenfalls werden alle Werte des eingefügten Attributs auf den Standardwert gesetzt.
+        else:
+            update_query = f'{update_query} DEFAULT;'
 
     ### Ausführung der Update-Anweisung für alle SQL-Dialekt-Konstellationen ###
     result = None
-    if update_query is not None:
+    
         # Zunächst werden die (ggf. leere) Anweisung zum Hinzufügen der neuen Spalte und die Update-Anweisung zusammengefügt, um sie unmittelbar nacheinander über die gleiche Datenbankverbindung ausführen zu können.
-        add_and_update_query = f'{add_column_query} {update_query}'
-        print(add_and_update_query)
-        try:
-            # Aufbau der Datenbankverbindung
-            connection = target_engine.connect()
-        except Exception as error:
-            # Ausgabe einer Fehlermeldung, falls der Aufbau fehlschlägt
-            raise error
+    add_and_update_query = f'{add_column_query} {update_query}'
+    print(add_and_update_query)
+    text_query = text(add_and_update_query)
+    with target_engine.connect() as connection:
+        if params != None:
+            for key in params.keys():
+                text_query.bindparams(bindparam(key))
+            connection.execute(text_query, params)
+        # Ausführung der Update-Anweisung
         else:
-            # Ausführung der Update-Anweisung
-            connection.execute(text(add_and_update_query))
-            # Wenn gewünscht, ...
-            if commit:
-                # ... wird das Ergebnis in die Datenbank geschrieben.
-                connection.commit()
-            # Anschließend wird der neue Stand der Zieltabelle über dieselbe Verbindung abgefragt, um das Ergebnis auch ohne Speicherung beziehen zu können.
-            result = connection.execute(text(f'SELECT * FROM {target_table}'))
-        finally:
-            try:
-                # Schließen der Verbindung
-                connection.close()
-            # Falls dies fehlschlägt, weil keine Verbindung aufgebaut werden konnte, ...
-            except UnboundLocalError:
-                # ... ist keine weitere Handlung nötig.
-                pass
-    # Wenn das Ergebnis nicht in die Datenbank geschrieben werden soll, ...
-    if commit == False:
-        # ... wird zusätzlich zum Ergebnis die Anweisung für das Erstellen des neuen Attributs und für die Aktualisierung der Zieltabelle ausgegeben, damit diese nicht neu erstellt werden muss.
-        return result, add_and_update_query
-    # Anderenfalls ...
-    else:
-        # ... wird nur die aktualisierte Zieltabelle zurückgegeben.
-        return result
+            connection.execute(text_query)
+        # Anschließend wird der neue Stand der Zieltabelle über dieselbe Verbindung abgefragt, um das Ergebnis auch ohne Speicherung beziehen zu können.
+        result = connection.execute(text(f'SELECT * FROM {target_table}'))
+        # Zusätzlich zum Ergebnis wird die Anweisung für das Erstellen des neuen Attributs und für die Aktualisierung der Zieltabelle ausgegeben, damit diese nicht neu erstellt werden muss.
+        return result, add_and_update_query, params
 
 def build_query_to_add_column(table_meta_data:TableMetaData, attribute_name:str, target_column_data_type_info:dict[str:str]):
     # Für die Erstellung der Anweisung zum Einfügen der neuen Spalte werden der Datentyp ...
@@ -745,19 +776,124 @@ def build_query_to_add_column(table_meta_data:TableMetaData, attribute_name:str,
             datetime_precision = target_column_data_type_info['datetime_precision']
             data_type = f'{data_type}({datetime_precision})'
             # ... bzw. bei Fehlen ausgelassen, sodass der Wert von der Datenbank automatisch gewählt wird.
-    # Unique-Constraints der neuen Attribute können direkt beim Anlegen festgelegt werden.Wenn eine solche Einschränkung für das Quellattribut bestand und in das Zielattribut übernommen wurde, ...
-    if target_column_data_type_info['is_unique']:
-        # ... wird dem Datentyp das Schlüsselwort UNIQUE angehängt.
-        data_type = f'{data_type} UNIQUE'
+    ### Zufügen von Unique-Constraints und Standardwerten ###
+    # Für Serial-Datentypen sind Unique-Constraints und Standardwerte implizit durch den Datentyp festgelegt, daher können sie hier ausgelassen werden.
+    if 'serial' not in data_type:
+        # Für Unique-Constraints ...
+        if target_column_data_type_info['is_unique']:
+            # ... wird dem Datentyp das Schlüsselwort UNIQUE angehängt.
+            data_type = f'{data_type} UNIQUE'
+        # Auch der Standardwert kann hier festgelegt werden.
+        default = target_column_data_type_info['column_default']
+        # Wenn nichts angegeben ist, wird dieser automatisch auf 'NULL' gesetzt.
+        # Da der Standardwert ein komplexer Ausdruck sein kann, der sich ggf. auch auf Attribute oder Tabellen bezieht, die nicht übertragen 
+        # werden, wird der Standardwert in dieser ersten Version nur übernommen, wenn es sich hierbei um eine Zahl oder das SQL-Kürzel für den
+        # aktuellen Zeitstempel handelt.
+        if default is not None and (type(default) == int or type(default) == float or 'current_timestamp' in str(default).lower()):
+            data_type = f'{data_type} DEFAULT {default}'
+
     # Ausgabe der zusammengefügten Anweisung zum Erstellen des neuen Attributs. Das Semikolon wird hier hinzugefügt, damit diese Anweisung der Update-Anweisung unmittelbar vorangestellt werden kann.
     return f'ALTER TABLE {table_name} ADD COLUMN {attribute_name} {data_type};'
-    
 
-def add_constraint_to_existing_column(table_meta_data:TableMetaData, column_name:str, constraint_type:str):
-    if constraint_type not in ('nn', 'u', 'c'):
-        raise ArgumentError('Mit dieser Funktion können ausschließlich Not-NULL-, Unique- oder Check-Constraints (nn, u bzw. c) zu einer Tabellenspalte hinzugefügt werden.')
+def execute_merge_and_add_constraints(target_table_meta_data:TableMetaData, source_table_meta_data:TableMetaData, target_attribute_name:str, source_attribute_name:str, query:str, params:dict|None):
+    target_engine = target_table_meta_data.engine
+    try:
+        execute_sql_query(target_engine, text(query), params = params, raise_exceptions = True, commit = True)
+    except Exception as error:
+        raise error
+    else:
+        try:
+            return add_constraints_to_new_attribute(target_table_meta_data, source_table_meta_data, target_attribute_name, source_attribute_name)
+        except Exception as error:
+            raise error
 
 
+def add_constraints_to_new_attribute(target_table_meta_data:TableMetaData, source_table_meta_data:TableMetaData, target_attribute_name:str, source_attribute_name:str):
+    source_engine = source_table_meta_data.engine
+    target_engine = target_table_meta_data.engine
+    source_table_name = source_table_meta_data.table_name
+    target_table_name = convert_string_if_contains_capitals_or_spaces(target_table_meta_data.table_name, source_engine.dialect.name)
+    escaped_target_attribute = convert_string_if_contains_capitals_or_spaces(target_attribute_name, source_engine.dialect.name)
+    data_type_info = source_table_meta_data.data_type_info[source_attribute_name]
+    message = ''
+    ### Hinzufügen der NOT-NULL-Constraint, falls das ursprüngliche Attribut eine solche aufweist ###
+    if not data_type_info['is_nullable']:
+        # Überprüfung, ob das Attribut NULL-Werte enthält (MariaDB würde dann beim Hinzufügen der Constraint Werte erzwingen, die nicht NULL sind, und
+        # nur eine Warnung ausgeben)
+        null_count = execute_sql_query(target_engine, text(f'SELECT COUNT(*) FROM {target_table_name} WHERE {escaped_target_attribute} IS NULL')).fetchone()[0]
+        if null_count > 0:
+            message = f'Dem Attribut {target_attribute_name} kann keine NOT-NULL-Constraint hinzugefügt werden, da darin NULL-Werte enthalten sind.'
+        else:
+            query = None
+            # Für MariaDB müssen beim Hinzufügen einer NOT-NULL-Constraint alle Attributinformationen wie der Standardwert angegeben werden,
+            # damit diese erhalten bleiben.
+            if target_engine.dialect.name == 'mariadb':
+                data_type = get_full_column_definition_for_mariadb(target_table_meta_data, target_attribute_name)
+                if data_type is not None:
+                    query = f'ALTER TABLE {target_table_name} MODIFY {data_type} NOT NULL'
+            elif target_engine.dialect.name == 'postgresql':
+                query = f'ALTER TABLE {target_table_name} ALTER COLUMN {escaped_target_attribute} SET NOT NULL'
+            else:
+                raise DialectError(f'Der SQL-Dialekt {target_engine.dialect.name} wird nicht unterstützt.')
+            try:
+                execute_sql_query(source_engine, text(query), raise_exceptions = True, commit = True)
+            except Exception:
+                message = 'Aufgrund eines Fehlers konnte die NOT-NULL-Constraint nicht hinzugefügt werden.'
+            else:
+                message = 'Die NOT-NULL-Constraint konnte erfolgreich hinzugefügt werden.'
+
+    ### CHECK-Constraints ###
+    if source_engine.dialect.name == 'mariadb':
+        # Abfrage von https://dataedo.com/kb/query/mariadb/list-table-check-constraints, abgewandelt
+        constraint_query = f"SELECT CHECK_CLAUSE, CONSTRAINT_NAME FROM information_schema.check_constraints WHERE CONSTRAINT_SCHEMA = DATABASE() AND TABLE_NAME = '{source_table_name}' AND CHECK_CLAUSE LIKE '%\"{source_attribute_name}\"%'"
+    elif source_engine.dialect.name == 'postgresql':
+        escaped_source_attribute = convert_string_if_contains_capitals_or_spaces(source_attribute_name, source_engine.dialect.name)
+        # Abfrage von https://dba.stackexchange.com/questions/214863/how-to-list-all-constraints-of-a-table-in-postgresql User David V McKay, abgewandelt
+        constraint_query = f"SELECT pg_catalog.pg_get_constraintdef(r.oid, true) as condef, conname FROM pg_catalog.pg_constraint r WHERE r.conrelid in ('{source_table_name}'::regclass) AND pg_catalog.pg_get_constraintdef(r.oid, true) LIKE 'CHECK (%{escaped_source_attribute}'"
+    else:
+        raise DialectError(f'Der SQL-Dialekt {source_engine.dialect.name} wird nicht unterstützt.')
+    constraint_result = convert_result_to_list_of_lists(execute_sql_query(source_engine, text(constraint_query)))
+    if len(constraint_result) > 0:
+        success_counter = 0
+        for row in constraint_result:
+            constraint_string = str(row[0]).replace(source_attribute_name, target_attribute_name)
+            constraint_name = str(row[1]).replace(source_attribute_name, target_attribute_name)
+            if not constraint_string.lower().startswith('check'):
+                constraint_string = f'CHECK ({constraint_string})'
+            add_constraint_query = text(f'ALTER TABLE {target_table_name} ADD CONSTRAINT {constraint_name} {constraint_string}')
+            try:
+                execute_sql_query(target_engine, add_constraint_query, raise_exceptions = True, commit = True)
+            except Exception as error:
+                message = f'{message} Die Bedingung {constraint_string} konnte aufgrund eines Fehlers nicht hinzugefügt werden: {str(error)}.'
+            else:
+                success_counter += 1
+        if success_counter == len(constraint_result):
+            message = f'{message} Alle {success_counter} CHECK-Constraints konnten erfolgreich hinzugefügt werden.'
+        elif success_counter != 0:
+            message = f'{message} {success_counter} von {len(constraint_result)} CHECK-Constraints konnten erfolgreich hinzugefügt werden.'
+    else:
+        if data_type_info['is_nullable']:
+            message = f'Für das Attribut {source_attribute_name} bestehen in der Quelltabelle keine NOT-NULL- oder CHECK-Constraints.'
+        else:
+            message = f'Für das Attribut {source_attribute_name} bestehen in der Quelltabelle keine CHECK-Constraints.'
+    return message
+
+
+def get_full_column_definition_for_mariadb(table_meta_data:TableMetaData, attribute_name:str, ):
+    if attribute_name not in table_meta_data.columns:
+        raise ArgumentError(None, 'Das zu betrachtende Attribut muss in der angegebenen Tabelle enthalten sein.')
+    engine = table_meta_data.engine
+    table_name = table_meta_data.table_name
+    if engine.dialect.name != 'mariadb':
+        raise DialectError(f'Der SQL-Dialekt {engine.dialect.name} wird in dieser Funktion nicht unterstützt.')
+    result = execute_sql_query(engine, text(f'SHOW CREATE TABLE {table_name}'))
+    if result is not None:
+        create_statements = str(result.fetchone()[1]).split(',')
+        for statement in create_statements:
+            # Die erste mit dem Namen des gesuchten Attributs beginnende Zeile in der 'CREATE-TABLE'-Anweisung enthält dessen Definition
+            if statement.startswith(attribute_name) or statement.startswith(f'"{attribute_name}"'):
+                return statement
+    return None
 
 
 def check_arguments_for_joining(table_meta_data:list[TableMetaData], attributes_to_join_on:list[str], attributes_to_select_1:list[str], attributes_to_select_2:list[str], cast_direction:int = None):
@@ -771,7 +907,7 @@ def check_arguments_for_joining(table_meta_data:list[TableMetaData], attributes_
         raise ArgumentError(None, 'Die Tabellen können nur über zwei Attribute miteinander verbunden werden.')
     elif len(table_meta_data) != 2:
         raise ArgumentError(None, 'Es müssen exakt zwei Tabellen angegeben werden, die verbunden werden sollen.')
-    elif len(attributes_to_select_1) + len(attributes_to_select_2) <= 0:
+    elif len(attributes_to_select_1) + len(attributes_to_select_2) == 0:
         raise ArgumentError(None, 'Es muss mindestens ein Attribut ausgewählt werden, das zurückgegeben werden soll.')
     elif cast_direction not in (0, 1, 2):
         raise ArgumentError(None, 'Bitte geben Sie den Wert 1 an, wenn das Verbindungsattribut von Tabelle 1 konvertiert werden soll, 2 für eine Konversion des Verbindungsattributs von Tabelle 2 und für das Auslassen von Konversionen den Wert None.')
@@ -893,7 +1029,7 @@ def check_basic_data_type_compatibility(table_meta_data_1:TableMetaData, table_m
             # Code für Kompatibilität. 0 bei fehlender Kompatibilität; 1 bei voller Kompatibilität; 2 bei ggf. uneindeutigen Einträgen des Attributs; 3, wenn ggf. Typkonversionen nötig sind; 4, wenn definitiv Typkonversionen notwendig sind. Durch Kombination können sich zudem die Werte 5 für ggf. nicht eindeutige Werte mit ggf. nötigen Typkonversionen und 6 für ggf. nicht eindeutige Werte mit nötigen Typkonversionen ergeben.
             comp_code = 0
             print(full_dtype_info_1, full_dtype_info_2)
-            if (full_dtype_info_1 == full_dtype_info_2 or dgroup_1 == dgroup_2) and (full_dtype_info_1['is_unique'] and full_dtype_info_2['is_unique']):
+            if (full_dtype_info_1 == full_dtype_info_2) or (dgroup_1 == dgroup_2 and full_dtype_info_1['is_unique'] and full_dtype_info_2['is_unique']):
                 comp_code = 1
             else:
                 if not full_dtype_info_1['is_unique'] or not full_dtype_info_2['is_unique']:
@@ -907,6 +1043,5 @@ def check_basic_data_type_compatibility(table_meta_data_1:TableMetaData, table_m
                 compatibility_by_code[comp_code] = [(column_name_1, column_name_2)]
             else:
                 compatibility_by_code[comp_code].append((column_name_1, column_name_2))
-            print(f'{dgroup_1} of type {dtype_1} and {dgroup_2} of {dtype_2} are of comp_code {comp_code}.')
 
     return compatibility_by_code

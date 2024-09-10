@@ -1,4 +1,4 @@
-/* adapted from: https://dev.to/phylis/loginregistration-form-with-python-flask-and-mysql-3hek */
+/* Mit Anpassungen übernommen von https://dev.to/phylis/loginregistration-form-with-python-flask-and-mysql-3hek */
 
 * {
     box-sizing: border-box;
@@ -23,31 +23,37 @@ body {
     background-color: #ffffff;
 }
 
-
+/* Überschriften der ersten Ebene */
 .connect h1 {
     text-align: center;
     color: #006ab3;
     font-size: 24px;
     padding: 20px 0 20px 0;
     border-bottom: 1px solid #dee0e4;
+    /* horizontale, ein Pixel breite Linie unter der Überschrift */
 }
 
+/* Überschriften der zweiten Ebene */
 .connect h2 {
     text-align: center;
 }
 
-.connect h4 {
+.msg {
     text-align: center;
-    font-weight: normal;
 }
 
+/* Container mit den beiden Anmeldeformularen für die Datenbanken */
 .db-forms {
     display: flex;
+    /* Darstellung der Formulare nebeneinander */
     justify-content: space-between;
+    /* gleichmäßige Verteilung der Formulare, sodass sie auf der horizontalen Achse zentriert sind */
 }
 
+/* Darstellung der Formulare */
 .db-forms form {
     display: grid;
+    /* Anordnung in einem Gitter */
     grid-template-columns: repeat(1, 1fr);
     float: left;
     padding: 30px;
@@ -103,10 +109,7 @@ body {
 
 .buttons {
     display: inline-block;
-
-
 }
-
 
 input[type=text],
 textarea {

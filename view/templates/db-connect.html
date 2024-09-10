@@ -4,17 +4,15 @@
 <head>
     <title>SQL-Datenbanken</title>
     <meta charset="utf-8">
-    <!-- <meta name="viewport" content="width=device-width, initial-scale=1"> -->
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/connect.css') }}">
-
 </head>
 
 <body>
     <div class="connect">
         <h1>Willkommen, {{username}}!</h1>
         <h2>Sie können mit bis zu zwei Datenbanken arbeiten.</h2>
-
-        <h4>{{ message }}</h4>
+        {% include 'message.html' %}
         <div class="db-forms">
             <form id=first-db action="/connect-to-db" method="POST">
                 <h2 id="header-first">Bitte geben Sie folgende Daten für die erste Datenbank ein:</h2>
@@ -179,7 +177,7 @@
         </div>
     </div>
     <script>
-        /*function disableUnusedForm() {*/
+        //function disableUnusedForm() {*/
         const engineNo = "{{ engine_no | int }}";
         let form;
         let headline;
@@ -205,7 +203,7 @@
 
         }
         submitButton.disabled = true;
-        /*}*/
+        //}
         /*var form = document.getElementById("second-db");
         var elements = form.elements;
         for (var i = 0, len = elements.length; i < len; ++i) {
@@ -217,7 +215,9 @@
         document.getElementById("header-second").style.color = "lightGray";
         const submitButton2 = document.getElementById('db-two');
         submitButton2.disabled = true;*/
-        //disableUnusedForm();
+        // disableUnusedForm();
+
+        // Anpassung des Standardwertes für die Portnummer basierend auf der Dialektauswahl 
         const forms = document.querySelectorAll('form');
         console.log(forms);
         forms.forEach((form) => {

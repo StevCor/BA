@@ -3,18 +3,15 @@ from sqlalchemy import Engine
 
 
 class TableMetaData:
-    def __init__(self, engine:Engine, table_name:str, primary_keys:list[str], data_type_info:dict[str:dict[str:str]], column_names_and_data_types:dict, row_count:int):
+    def __init__(self, engine:Engine, table_name:str, primary_keys:list[str], data_type_info:dict[str:dict[str:str]], row_count:int):
         self.engine = engine
         self.table_name = table_name
         self.primary_keys = primary_keys
         self.data_type_info = data_type_info
-        column_names_and_data_types = column_names_and_data_types
-        self.columns = list(column_names_and_data_types.keys())
+        self.columns = list(data_type_info.keys())
         self.data_types = []
-        for key in column_names_and_data_types.keys():
-            self.data_types.append(column_names_and_data_types[key]['data_type'])
-
-        self.column_names_and_data_types = column_names_and_data_types
+        for key in data_type_info.keys():
+            self.data_types.append(data_type_info[key]['data_type'])
         self.total_row_count = row_count
 
     def __copy__(self):

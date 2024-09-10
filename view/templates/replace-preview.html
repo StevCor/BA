@@ -1,143 +1,146 @@
-<!DOCTYPE html>
-<html lang="de">
-
-<head>
-    <title>SQL-Datenbanken: Vorschau</title>
-    {% include 'css.html' %}
-    <script type="text/javascript">
-        function confirmBack() {
-            var result = confirm('Sind Sie sicher, dass Sie den Vorgang abbrechen wollen?');
-            if (result) {
-                window.history.back();
-            }
-        }
-    </script>
-
-</head>
-
-<body>
-
-    <div class="replace">
-        <div class="connection">
-            <h3>Verbunden mit Datenbank {{ db_name }}, Tabelle {{ table_name }} </h3>
-            <a href="{{ url_for('disconnect_from_single_db') }}"><button
-                    onclick="return confirm('Sind Sie sicher? Sie kehren dann zur Anmeldeseite zurück.')"> Verbindung
-                    trennen </button></a>
-        </div>
-
-        <div class="links">
-            <a href="{{ url_for('search_entries') }}">Suchen</a>
-            <a href="{{ url_for('search_and_replace_entries') }}" class="active">Suchen und Ersetzen</a>
-            <a href="{{ url_for('unify_db_entries') }}">Vereinheitlichen</a>
-        </div>
-        <h4>Bitte wählen Sie aus, welche Vorkommen von '{{ string_to_replace}}' durch '{{ replacement_string }}' ersetzt
-            werden sollen:</h4>
-        <form action="{{ '/replace' }}" method="POST">
-            <input type="checkbox" id="all" onclick="toggle(this);" value="all" checked>
-            <label for="all">Alle auswählen</label>
-            <div id="table">
-                <table id="preview">
-                    <thead>
-                        <tr>
-                            {% for column in table_columns %}
-                            <th>{{ column }}</th>
-                            {% endfor %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% set occurrence_count = [] %}
-                        {% for row in replacement_data_dict.values() %}
-                        <tr>
-                            {% set attribute_count = [] %}
-                            {% for index in row['positions'] %}
-                            {% if index == 1 %}
-                            {% set __ = occurrence_count.append(1) %}
-                            <td>
-                                <input type="checkbox" name="selection" checked onclick="switchData(this, this);"
-                                    data-old="{{ row['old'][attribute_count | length] }}"
-                                    data-new="{{ row['new'][attribute_count | length] }}"
-                                    id="{{ occurrence_count | length }}" value="{{ occurrence_count | length }}">
-                                <label for="{{ occurrence_count | length }}"
-                                    id="{{ 'label' + (occurrence_count | length | string) }}"> <span
-                                        style="color: green;">{{
-                                        row['new'][attribute_count | length] }}
-                                    </span></label>
-                            </td>
-                            {% else %}
-                            <td>{{ row['old'][attribute_count | length] }}</td>
-                            {% endif %}
-                            {% set __ = attribute_count.append(1) %}
-                            {% endfor %}
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-
-            </div>
-            <span class="counter">{{ occurrence_count | length }} </span> von {{ occurrence_count | length }}
-            betroffenen Einträgen werden verändert.
-            <button onclick="confirmBack()">Abbrechen</button>
-            <input type="submit" value="Änderungen durchführen">
-            <input type="hidden" name="string-to-replace" value="{{ string_to_replace }}">
-            <input type="hidden" name="replacement-string" value="{{ replacement_string }}">
-            <input type="hidden" name="affected-attributes" value="{{ affected_attributes }}">
-        </form>
-        <div class="msg">{{ message }}</div>
-
+{% extends "one-table-preview-template.html" %}
+{% block title %}
+: Ersetzungsvorschau
+{% endblock title %}
+{% block replace_active %}
+class="active"
+{% endblock replace_active %}
+{% block preview_content %}
+<!-- Anzeige der Tabelle mit den Vorkommen des zu ersetzenden Strings -->
+<h4>Bitte wählen Sie aus, welche Vorkommen von '{{ string_to_replace}}' durch '{{ replacement_string }}' ersetzt
+    werden sollen:</h4>
+<!-- Formular für die Auswahl der Stringvorkommen, die tatsächlich ersetzt werden sollen -->
+<form action="{{ '/replace' }}" method="POST"> <!-- onclick="toggle(this);" -->
+    <input type="checkbox" id="all" value="all" checked>
+    <label for="all">Alle auswählen</label>
+    <div id="table">
+        <table id="preview">
+            <thead>
+                <tr>
+                    {% for column in table_columns %}
+                    <th>{{ column }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% set occurrence_count = [] %}
+                {% for row in replacement_data_dict.values() %}
+                <tr>
+                    {% set attribute_count = [] %}
+                    {% for index in row['positions'] %}
+                    {% if index == 1 %}
+                    {% set __ = occurrence_count.append(1) %}
+                    <td><!-- onclick="switchData(this, this);" -->
+                        <input type="checkbox" class="selection" name="selection" checked
+                            data-old="{{ row['old'][attribute_count | length] }}"
+                            data-new="{{ row['new'][attribute_count | length] }}" id="{{ occurrence_count | length }}"
+                            value="{{ occurrence_count | length }}">
+                        <label for="{{ occurrence_count | length }}"
+                            id="{{ 'label' + (occurrence_count | length | string) }}" class="highlight">{{
+                            row['new'][attribute_count | length] }}
+                        </label>
+                    </td>
+                    {% else %}
+                    <td>{{ row['old'][attribute_count | length] }}</td>
+                    {% endif %}
+                    {% set __ = attribute_count.append(1) %}
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
 
     </div>
-    <script>
+    <span class="counter">{{ occurrence_count | length }} </span> von {{ occurrence_count | length }}
+    betroffenen Einträgen werden verändert.
+    <button id="backButton">Abbrechen</button>
+    <input type="submit" value="Änderungen durchführen">
+    <input type="hidden" name="string-to-replace" value="{{ string_to_replace }}">
+    <input type="hidden" name="replacement-string" value="{{ replacement_string }}">
+    <input type="hidden" name="affected-attributes" value="{{ affected_attributes }}">
+</form>
+{% endblock preview_content %}
 
-        function switchData(affectedCheckbox, caller) {
-            const labelId = 'label' + affectedCheckbox.value;
-            let labelElement = document.getElementById(labelId);
-            var boxToCheckAll = document.getElementById('all');
-            if (affectedCheckbox.checked == true) {
-                labelElement.innerText = affectedCheckbox.dataset.new;
-                labelElement.style.color = "green";
-            } else {
-                labelElement.innerText = affectedCheckbox.dataset.old;
-                labelElement.style.color = "black";
-                boxToCheckAll.checked = false;
-            }
-
-            if (caller == affectedCheckbox) {
-                var allBoxes = document.querySelectorAll('input[type="checkbox"]');
-                var counter = 0;
-                for (var i = 0; i < allBoxes.length; i++) {
-                    if (allBoxes[i] != boxToCheckAll && allBoxes[i].checked == true) {
-                        counter++;
-                    }
-                }
-                if (counter == allBoxes.length - 1) {
-                    boxToCheckAll.checked = true;
-                }
-                let selectedEntries = document.querySelector('.counter');
-                selectedEntries.innerHTML = counter;
-            }
-
+{% block more_js %}
+<script>
+    // Funktion für die Umstellung zwischen neuem und altem Wert bei Änderung des Checkboxzustands
+    function switchData(affectedCheckbox, caller) {
+        // Beziehen des Label-Elements, in dem der Wert dargestellt wird
+        const labelId = 'label' + affectedCheckbox.value;
+        let labelElement = document.getElementById(labelId);
+        // Checkbox zur An- bzw. Abwahl aller Checkboxen ('all'-Checkbox)
+        let boxToCheckAll = document.getElementById('all');
+        // Wenn die aktuelle Checkbox angewählt wird, ...
+        if (affectedCheckbox.checked == true) {
+            // ... wird ihr Labeltext auf den Wert gesetzt, der in ihrem Attribut 'data-new' steht ... 
+            labelElement.innerText = affectedCheckbox.dataset.new;
+            // ... und grün dargestellt.
+            labelElement.classList.add('highlight');
+        } else {
+            // Bei Abwahl hingegen wird der Labeltext auf den alten Wert (Attribut 'data-old') gesetzt ...
+            labelElement.innerText = affectedCheckbox.dataset.old;
+            // ... und schwarz gefärbt.
+            labelElement.classList.remove('highlight');
+            // Außerdem ist nun mindestens eine Checkbox abgewählt, sodass die 'all'-Checkbox abgewählt wird.
+            boxToCheckAll.checked = false;
         }
-        // Quelle: https://stackoverflow.com/questions/386281/how-to-implement-a-select-all-checkbox-in-html (ohne switchData)
-        function toggle(source) {
-            var checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        /* Wenn die aufrufende Checkbox die von der Änderung betroffene Checkbox ist (d. h. die Funktion nicht von der 'all'-Checkbox aufgerufen wurde), muss der Zähler für die ausgewählten Änderungen noch angepasst werden. */
+        if (caller == affectedCheckbox) {
+            var allBoxes = document.querySelectorAll('input[type="checkbox"]');
             var counter = 0;
-            for (var i = 0; i < checkboxes.length; i++) {
-                if (checkboxes[i] != source) {
-                    checkboxes[i].checked = source.checked;
-                    switchData(checkboxes[i], source);
+            // Hierfür werden alle Checkboxen gezählt, die nicht der 'all'-Checkbox entsprechen und angewählt sind.
+            for (var i = 0; i < allBoxes.length; i++) {
+                if (allBoxes[i] != boxToCheckAll && allBoxes[i].checked == true) {
+                    counter++;
                 }
             }
-            let selectedEntries = document.querySelector('.counter');
-            if (source.checked == false) {
-                selectedEntries.innerHTML = 0;
-            } else {
-                selectedEntries.innerHTML = checkboxes.length - 1;
+            console.log(counter);
+            // Wenn alle Checkboxen außer der 'all'-Checkbox angewählt wurden, ...
+            if (counter == allBoxes.length - 1) {
+                // ... wird die letztgenannte auch angewählt.
+                boxToCheckAll.checked = true;
             }
+            // Zudem wird der finale Wert des Zählers in der Statistik unter der Tabelle angezeigt.
+            let selectedEntries = document.querySelector('.counter');
+            selectedEntries.innerHTML = counter;
         }
 
+    }
+    /* An- bzw. Abwahl aller Attribut-Checkboxen bei Betätigung der 'all'-Checkbox 
+    Quelle: https://stackoverflow.com/questions/386281/how-to-implement-a-select-all-checkbox-in-html (ohne switchData)*/
+    function toggle(source) {
+        var checkboxes = document.querySelectorAll('input[type="checkbox"]');
+        var counter = 0;
+        // Der Aufbau ist analog zur vorigen Funktion, ...
+        for (var i = 0; i < checkboxes.length; i++) {
+            if (checkboxes[i] != source) {
+                checkboxes[i].checked = source.checked;
+                // ... mit der Ausnahme, dass für jede angewählte Attributs-Checkbox der angezeigte Wert mit switchData aktualisiert wird.
+                switchData(checkboxes[i], source);
+            }
+        }
+        let selectedEntries = document.querySelector('.counter');
+        if (source.checked == false) {
+            selectedEntries.innerHTML = 0;
+        } else {
+            selectedEntries.innerHTML = checkboxes.length - 1;
+        }
+    }
 
+    // Hinzufügen des EventListeners für den Wechsel der angezeigten Daten bei An- bzw. Abwahl der Attributs-Checkboxen
+    let attributeCheckboxes = document.getElementsByClassName('selection');
+    console.log(attributeCheckboxes);
 
-    </script>
-</body>
+    for (var i = 0; i < attributeCheckboxes.length; i++) {
+        attributeCheckboxes[i].addEventListener('change', function () {
+            switchData(this, this);
+        });
+    };
 
-</html>
+    // Hinzufügen des EventListeners für die An- bzw. Abwahl aller Checkboxen bei Betätigung der 'all'-Checkbox
+    let boxToCheckAll = document.getElementById('all');
+    boxToCheckAll.addEventListener('change', function () {
+        toggle(this);
+    })
+</script>
+{% endblock more_js %}

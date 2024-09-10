@@ -1,114 +1,26 @@
-<!DOCTYPE html>
-<html lang="de">
-
-<head>
-    <title>SQL-Datenbanken</title>
-    {% include 'css.html' %}
-    <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
-    <style>
-        body {
-            font-family: Arial;
-        }
-
-        ul {
-            list-style-type: none;
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-        }
-
-        li {
-            float: left;
-        }
-
-        /* Style the tab */
-        .tab {
-            overflow: hidden;
-            border: 1px solid #ccc;
-            background-color: #f1f1f1;
-        }
-
-        /* Style the buttons inside the tab */
-        .tab button {
-            background-color: inherit;
-            float: left;
-            border: none;
-            outline: none;
-            cursor: pointer;
-            padding: 14px 16px;
-            transition: 0.3s;
-            font-size: 17px;
-        }
-
-        /* Change background color of buttons on hover */
-        .tab button:hover {
-            background-color: #ddd;
-        }
-
-        /* Create an active/current tablink class */
-        .tab button.active {
-            background-color: #ccc;
-        }
-
-        /* Style the tab content */
-        .searchbar {
-            display: inline-flex;
-            padding: 6px 12px;
-            border-top: none;
-        }
-
-        .searchbar label {
-            padding: 12px 12px 12px 0;
-            margin-left: 10px;
-            display: inline-flex;
-        }
-
-
-        .searchbar form input[type="submit"] {
-            margin-top: 10px;
-            margin-left: 20px;
-        }
-    </style>
-
-</head>
-
-<body>
-    <div class="search">
-        <div class="connection">
-            <h3>Verbunden mit Datenbank {{ db_name }}, Tabelle {{ table_name }} </h3>
-            <a href="{{ url_for('disconnect_from_single_db') }}"><button
-                    onclick="return confirm('Sind Sie sicher? Sie kehren dann zur Anmeldeseite zurück.')"> Verbindung
-                    trennen </button></a>
-        </div>
-
-        <div class="tab">
-            <a href="{{ url_for('search_entries') }}" class="active">Suchen</a>
-            <a href="{{ url_for('search_and_replace_entries') }}">Suchen und Ersetzen</a>
-            <a href="{{ url_for('unify_db_entries') }}">Vereinheitlichen</a>
-        </div>
-        <form action="{{ '/search' }}" method="POST">
-            <div class=searchbar>
-                <label for="column-to-search">Spalte auswählen:</label>
-                <select name="column-to-search" id="column-to-search" required>
-                    <option value="all">Alle Spalten</option>
-                    {% for column in table_columns %}
-                    {% if column == searched_column %}
-                    <option value="{{ column }}" selected>{{ column }}</option>
-                    {% else %}
-                    <option value="{{ column }}">{{ column }}</option>
-                    {% endif %}
-                    {% endfor %}
-                </select>
-                <label for="search-string">Suchen:</label>
-                <input type="text" id="search-string" name="search-string" value="{{ searched_string }}">
-            </div>
-            {# <input type="hidden" id="engineno" name="engineno" value="{{ engine_no }}"> #}
-            <input type="hidden" id="tablename" name="tablename" value="{{ table_name }}">
-            <input type="submit" value="Suchen">
-        </form>
-        <div id="table"></div>
+{% extends "one-table-template.html" %}
+{% block title %}
+: Suche
+{% endblock title %}
+{% block search_active %} class="active" {% endblock search_active %}
+{% block one_table_form %}
+<form action="{{ '/search' }}" method="POST">
+    <div class=searchbar>
+        <label for="column-to-search">Spalte auswählen:</label>
+        <select name="column-to-search" id="column-to-search" required>
+            <option value="all">Alle Spalten</option>
+            {% for column in table_columns %}
+            {% if column == searched_column %}
+            <option value="{{ column }}" selected>{{ column }}</option>
+            {% else %}
+            <option value="{{ column }}">{{ column }}</option>
+            {% endif %}
+            {% endfor %}
+        </select>
+        <label for="search-string">Suchen:</label>
+        <input type="text" id="search-string" name="search-string" value="{{ searched_string }}">
     </div>
-    {% include 'grid.html' %}
-</body>
-
-</html>
+    <input type="hidden" id="table-name" name="table-name" value="{{ table_name }}">
+    <input type="submit" value="Suchen">
+</form>
+{% endblock one_table_form %}

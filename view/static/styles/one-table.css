@@ -9,6 +9,8 @@
 body {
     background-color: #dfdfdf;
     margin: 0;
+    display: flex;
+    justify-content: center;
 }
 
 h1 {
@@ -41,6 +43,31 @@ h1 {
     color: #006ab3;
 }
 
+
+.highlight {
+    color: green;
+}
+
+.connection {
+    padding: 12px;
+    margin-top: 10px;
+    display: flex;
+    justify-content: space-between;
+}
+
+/*
+button {
+    padding: 12px;
+    margin-top: 20px;
+    background-color: #006ab3;
+    border: 0;
+    cursor: pointer;
+    font-weight: bold;
+    color: #ffffff;
+    transition: background-color 0.2s;
+}*/
+
+/*
 form {
     display: flex;
     flex-wrap: wrap;
@@ -91,7 +118,7 @@ form input[type="submit"]:hover {
     background-color: #006ab3;
     transition: background-color 0.2s;
 }
-
+*/
 
 .msg {
     text-align: center;

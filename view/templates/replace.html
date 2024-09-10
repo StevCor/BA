@@ -1,65 +1,47 @@
-<!DOCTYPE html>
-<html lang="de">
+{% extends "one-table-template.html" %}
+{% block title %}: Suchen und Ersetzen
+{% endblock title %}
+{% block replace_active %} class="active" {% endblock %}
+{% block one_table_form %}
+<form id="replace-params" action="{{ '/replace-preview' }}" method="POST">
+    <h4>Bitte wählen geben Sie an, in welchen Spalten die Ersetzung vorgenommen werden soll.</h4>
+    Kommt der gesuchte String mehrfach in einem Eintrag vor, werden alle Vorkommen ersetzt. Bei Eingabe eines
+    leeren Strings wird der gesuchte String gelöscht.<br>
+    <label for="column-to-search">Spalte auswählen:</label>
+    <select name="column-to-search" id="column-to-search" required>
+        <option value="all">Alle Spalten</option>
+        {% for column in table_columns %}
+        <option value="{{ column }}">{{ column }}</option>
+        {% endfor %}
+    </select>
+    <label for="search-string">Suchen:</label>
+    <input type="text" id="searchstring" name="searchstring" minlength="2">
+    <label for="replacement">Ersetzen durch:</label>
+    <input type="text" id="replacement" name="replacement">
+    <input type="hidden" id="engine-no" name="engine-no" value="{{ engine_no }}">
+    <input type="hidden" id="table-name" name="table-name" value="{{ table_name }}">
+    <input type="submit" id="preview" value="Vorschau">
 
-<head>
-    <title>SQL-Datenbanken: Suchen und Ersetzen</title>
-    {% include 'css.html' %}
-
-</head>
-
-<body>
-    <input type="hidden" id="database_name" value="{{ db_name }}">
-
-    <div class="replace">
-        <div class="connection">
-            <h3>Verbunden mit Datenbank {{ db_name }}, Tabelle {{ table_name }} </h3>
-            <a href="{{ url_for('disconnect_from_single_db') }}"><button
-                    onclick="return confirm('Sind Sie sicher? Sie kehren dann zur Anmeldeseite zurück.')"> Verbindung
-                    trennen </button></a>
-        </div>
-
-        <div class="links">
-            <a href="{{ url_for('search_entries') }}">Suchen</a>
-            <a href="{{ url_for('search_and_replace_entries') }}" class="active">Suchen und Ersetzen</a>
-            <a href="{{ url_for('unify_db_entries') }}">Vereinheitlichen</a>
-        </div>
-        <form id="replaceparams" action="{{ '/replace-preview' }}" method="POST">
-            <label for="columntosearch">Spalte auswählen:</label>
-            <select name="columntosearch" id="columntosearch" required>
-                <option value="all">Alle Spalten</option>
-                {% for column in table_columns %}
-                <option value="{{ column }}">{{ column }}</option>
-                {% endfor %}
-            </select>
-            <label for="searchstring">Suchen:</label>
-            <input type="text" id="searchstring" name="searchstring" minlength="2">
-            <label for="replacement">Ersetzen durch:</label>
-            <input type="text" id="replacement" name="replacement">
-            <input type="hidden" id="engineno" name="engineno" value="{{ engine_no }}">
-            <input type="hidden" id="tablename" name="tablename" value="{{ table_name }}">
-            <input type="submit" id="preview" onclick="return isEmpty();" value="Vorschau">
-
-        </form>
-        <div id="table"></div>
-
-        <div class="msg">{{ message }}</div>
-
-    </div>
-    {% include 'grid.html' %}
-
-    <script>
-
-        function isEmpty() {
-            if (document.forms['replaceparams'].replacement.value === "") {
-                return confirm("Sind Sie sicher, dass Sie den gesuchten Wert löschen wollen?");
-            } else if (document.forms['replaceparams'].replacement.value === document.forms['replaceparams'].searchstring.value) {
-                alert("Der zu ersetzende und der neue Wert sind gleich. Daher werden keine Änderungen vorgenommen.")
-                return false
+</form>
+{% endblock one_table_form %}
+{% block more_js %}
+<script>
+    function showWarnings() {
+        if (document.forms['replace-params'].replacement.value === "") {
+            if (confirm("Sind Sie sicher, dass Sie den gesuchten (Teil-)Wert löschen wollen?") == true) {
+                return true;
+            } else {
+                return false;
             }
-            return true;
+        } else if (document.forms['replace-params'].replacement.value === document.forms['replace-params'].searchstring.value) {
+            alert("Der zu ersetzende und der neue Wert sind gleich. Daher werden keine Änderungen vorgenommen.")
+            return false
         }
-
-    </script>
-</body>
-
-</html>
+        return true;
+    }
+    let previewButton = document.getElementById('preview');
+    previewButton.addEventListener('click', function () {
+        return showWarnings();
+    });
+</script>
+{% endblock more_js %}

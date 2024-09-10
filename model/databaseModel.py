@@ -1,5 +1,4 @@
 from argparse import ArgumentError
-import datetime
 from sqlalchemy import CursorResult, Engine, create_engine, text, bindparam
 import urllib.parse
 from sqlalchemy.exc import OperationalError as operror
@@ -17,11 +16,9 @@ def connect_to_db(username:str, password:str, host:str, port:int, db_name:str, d
     elif(db_dialect == 'postgresql'):
         engine_url = f'{db_dialect}://{db_url}'
     else:
-        message = 'Dieser SQL-Dialekt wird von diesem Tool nicht unterstützt.'
-        print(message)
-
+        raise DialectError('Dieser SQL-Dialekt wird von diesem Tool nicht unterstützt.')
+        
     print(engine_url)
-    # TODO: Vielleicht zu charset wechseln? https://stackoverflow.com/questions/45279863/how-to-use-charset-and-encoding-in-create-engine-of-sqlalchemy-to-create
     if db_dialect == 'mariadb':
         test_engine = create_engine(engine_url)
     elif db_dialect == 'postgresql': 
@@ -64,18 +61,20 @@ def list_all_tables_in_db_with_preview(engine:Engine):
     else:
         return None
     result = execute_sql_query(engine, query)
+    tables_without_keys = []
     for row in result:
         current_table = ''.join(tuple(row))
+        primary_keys = get_primary_key_from_engine(engine, current_table)
+        if len(primary_keys) == 0:
+            tables_without_keys.append(current_table)
         query = f'SELECT * FROM {convert_string_if_contains_capitals_or_spaces(current_table, engine.dialect.name)} LIMIT 20'
         preview_result = execute_sql_query(engine, text(query))
         column_names = list(preview_result.keys())
         preview_list = convert_result_to_list_of_lists(preview_result)
         table_names_and_columns[current_table] = column_names
         table_previews[current_table] = preview_list
-    print(table_names_and_columns, table_previews)
-    return table_names_and_columns, table_previews
+    return table_names_and_columns, table_previews, tables_without_keys
  
-
 def get_full_table_ordered_by_primary_key(table_meta_data:TableMetaData, convert:bool = True):
     engine = table_meta_data.engine
     db_dialect = engine.dialect.name
@@ -88,85 +87,6 @@ def get_full_table_ordered_by_primary_key(table_meta_data:TableMetaData, convert
     else:
         return execute_sql_query(engine, query)
 
-
-
-
-    
-
-
-
-# # from https://gist.github.com/viewpointsa/bba4d475126ec4ef9427fd3c2fdaf5c1
-# def copy_table(source_engine, connectionStringDst, table_name, verbose=False, condition="" ):
-#     with source_engine.connect() as source_connection:
-#         with psycopg2.connect(connectionStringDst) as connDst:
-#             query = text(f'SELECT * FROM {convert_string_if_contains_capitals(table_name)} {condition}')
-#             with source_connection.cursor() as source_cursor:                
-#                 source_cursor.execute(query)
-#                 print("Anzahl der Zeilen in der Ursprungstabelle: ", source_cursor.rowcount)
-#                 with connDst.cursor() as curDst:
-#                     for row in source_cursor:
-#                         # generate %s x columns   
-#                         for line in source_cursor.desription:
-#                             query_columns = ','.join(line[0])
-#                         query_values = ','.join('%s' for x in range(len(source_cursor.description)))
-#                         query = f'INSERT INTO {convert_string_if_contains_capitals(table_name)} ({query_columns}) VALUES ({});'.format(table_name, query_columns, query_values)
-#                         param = [ item for item in row ]
-#                         if verbose:
-#                             print curDst.mogrify(query,param )
-#                         curDst.execute( query, param )
-
-
-
-
-
-
-
-
-
-def get_column_names_data_types_and_max_length(engine:Engine, table_name:str):
-    query = ''
-    if engine.dialect.name == 'postgresql':
-        query = text(f"SELECT column_name, data_type, character_maximum_length FROM information_schema.columns WHERE table_name = '{table_name}' AND table_catalog = '{engine.url.database}'")
-    elif engine.dialect.name == 'mariadb':
-        query = text(f"SELECT COLUMN_NAME AS column_name, DATA_TYPE AS data_type, CHARACTER_MAXIMUM_LENGTH AS character_maximum_length FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{table_name}'")
-    else:
-        print('Nicht implementiert.')
-        return None
-    result = execute_sql_query(engine, query)
-    column_names_and_data_types = dict()
-    for row in result:
-        column_name = row[0]
-        data_type_lowercase = row[1].lower()
-        data_type = row[1]
-        # nur für Textattribute vorhanden, None bei Zahlen
-        char_max_length = row[2]
-        if engine.dialect.name == 'postgresql':
-            text_int_decimal_or_other = 3
-            if data_type_lowercase in ('character varying', 'varchar', 'character', 'char', 'bpchar', 'text'): 	
-                text_int_decimal_or_other = 0
-            elif data_type_lowercase in ('smallint', 'integer', 'bigint', 'smallserial', 'serial', 'bigserial'):
-                text_int_decimal_or_other = 1
-            elif data_type_lowercase in ('decimal', 'numeric', 'real', 'double precision'):
-                text_int_decimal_or_other = 2
-        elif engine.dialect.name == 'mariadb':
-            text_int_decimal_or_other = 3
-            if data_type_lowercase in ('binary', 'blob', 'char', 'char byte', 'enum', 'inet4', 'inet6', 'json', 'mediumblob', 'mediumtext', 'longblob', 'long', 'long varchar', 'longtext', 'row', 'text', 'tinyblob', 'tinytext', 'varbinary', 'varchar', 'set'): 	
-                text_int_decimal_or_other = 0
-            elif data_type_lowercase in ('tinyint', 'boolean', 'int1', 'smallint', 'int2', 'mediumint', 'int3', 'int', 'integer', 'int4', 'bigint', 'int8', 'bit'):
-                text_int_decimal_or_other = 1
-            elif data_type_lowercase in ('decimal', 'dec', 'numeric', 'fixed', 'float', 'double', 'double precision', 'real'):
-                text_int_decimal_or_other = 2
-
-       
-        column_names_and_data_types[column_name] = {'data_type': data_type, 'data_type_group': text_int_decimal_or_other, 'char_max_length': char_max_length}
-    return column_names_and_data_types
-
-
-
-
-
-
-
 def get_row_count_from_engine(engine:Engine, table_name:str):
     table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
     # https://datawookie.dev/blog/2021/01/sqlalchemy-efficient-counting/
@@ -175,7 +95,7 @@ def get_row_count_from_engine(engine:Engine, table_name:str):
     return res.fetchone()[0] 
 
 def build_sql_condition(column_names:tuple, db_dialect:str, operator:str = None):
-    if (operator and operator.upper() not in ('AND', 'OR')) :
+    if (operator and operator.upper() not in ('AND', 'OR')):
         raise QueryError('Der für die Bedingung angegebene Operator wird nicht unterstützt.')
     elif not operator and len(column_names) > 1:
         raise QueryError('Bei mehr als einem betroffenen Feld muss ein Operator für die Bedingung angegeben werden.')
@@ -205,7 +125,6 @@ def check_database_encoding(engine:Engine):
 
 def execute_sql_query(engine:Engine, query:text, params:dict = None, raise_exceptions:bool = False, commit:bool = None):
     result = None
-    print(query)
     if params != None:
         for key in params.keys():
             query.bindparams(bindparam(key))
@@ -214,7 +133,7 @@ def execute_sql_query(engine:Engine, query:text, params:dict = None, raise_excep
         if engine.dialect.name == 'mariadb':
             connection.execute(text("SET sql_mode='ANSI_QUOTES'"))
             connection.commit()
-        if params == None:
+        if params is None:
             result = connection.execute(query)
         else:
             result = connection.execute(query, params)
@@ -311,7 +230,7 @@ def check_data_type_meta_data(engine:Engine, table_name:str):
         else:
             is_nullable = False                
         data_type = row[3]
-        if (db_dialect == 'mariadb' and row[10] is not None and 'auto_increment' in row[10]) or (db_dialect == 'postgresql' and column_default is not None and 'nextval' in column_default):
+        if (db_dialect == 'mariadb' and row[10] is not None and 'auto_increment' in str(row[10]).lower()) or (db_dialect == 'postgresql' and column_default is not None and 'nextval' in column_default):
             auto_increment = True
         else:
             auto_increment = False
@@ -353,6 +272,7 @@ def check_data_type_meta_data(engine:Engine, table_name:str):
         if is_unsigned != None:
             result_dict[column_name]['is_unsigned'] = is_unsigned
         result_dict[column_name]['is_nullable'] = is_nullable
+        result_dict[column_name]['column_default'] = column_default
         result_dict[column_name]['is_unique'] = is_unique
         result_dict[column_name]['auto_increment'] = auto_increment
     return result_dict
@@ -360,6 +280,10 @@ def check_data_type_meta_data(engine:Engine, table_name:str):
 if __name__ == '__main__':
     engine = connect_to_db('postgres', 'arc-en-ciel', 'localhost', 5432, 'Test', 'postgresql', 'utf8')
     yo = get_full_table_ordered_by_primary_key(engine, 'studierende', ['matrikelnummer'])
+    query = f'ALTER TABLE ADD COLUMN :new_column_name integer'
+    param = {'new_column_name': 'SELECT'}
+    query.bindparama(bindparam('new_column_name'))
+    engine.connect().execute(query, param)
     for line in yo:
         print('line: ', line)
     maria_engine = connect_to_db('root', 'arc-en-ciel', 'localhost', 3306, 'test', 'mariadb', 'utf8')
