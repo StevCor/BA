@@ -1,0 +1,15 @@
+Einrichtung des Projekts:
+1. Installation der Python-Module aus requirements.txt (entweder in einer Python-Installation oder in einer virtuellen Umgebung)
+2. Anlegen einer PostgreSQL-Datenbank mit dem Namen PostgresTest1 und einer MariaDB-Datenbank mit dem Namen MariaTest auf den lokalen Servern
+3. Hinterlegen der Zugangsdaten für diese Datenbanken in .env
+4. Ausführen der SQL-Skripte table_creation_mariadb.sql und table_creation_postgres.sql in den erstellten MariaDB- bzw. PostgreSQL-Datenbanken
+5. Ausführen von app.py, Aufruf der Web-App im Browser unter localhost:8000
+
+Tests in Visual Studio Code: 
+    Installation der VS-Code-Python-Extension und des Moduls pytest
+    Konfigurieren der Tests über den Button mit dem Erlenmeyerkolben ("Testing") in der linken Menüleiste: 
+        Klick auf den Button 'Configure Python Tests'
+        Auswahl von pytest im Dropdown-Menü für die Framework-Auswahl
+        Auswahl des Ordners tests als Quelle der Python-Tests
+    Ausführen über Rechtsklick -> Run Tests auf die jeweilige Testdatei oder in der Navigation des Testmenüs über die Pfeile
+

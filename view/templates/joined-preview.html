@@ -1,10 +1,13 @@
 {% extends "joined-preview-template.html" %}
+
 {% block title %}
 : {% if mode == 'compare'%}Join-Vorschau{% elif mode == 'merge'%}Übertragungsvorschau{% endif%}
 {% endblock title %}
+
 {% if mode == 'compare' %}{% block compare_active %} class="active" {% endblock compare_active %}
 {% elif mode == 'merge' %}{% block merge_active %} class="active" {% endblock merge_active %}
 {% endif %}
+
 {% block table_title %}
 {% if mode == 'compare '%}
 <h4>Join der Tabellen {{ db_name_1 }}.{{ table_name_1 }} und {{ db_name_2 }}.{{ table_name_2 }}, verbunden über
@@ -14,6 +17,7 @@
 </h4>
 {% endif %}
 {% endblock table_title %}
+
 {% block statistics_or_form %}
 {% if mode == 'compare '%}
 {{ unmatched_rows[0] }} Tupel aus {{ db_name_1 }}.{{ table_name_1 }} und {{

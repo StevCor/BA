@@ -756,6 +756,18 @@ def logout():
 
 
 if __name__ == '__main__':
+    maria_engine = connect_to_db('root', 'arc-en-ciel', 'localhost', 3306, 'MariaTest', 'mariadb', 'utf8')
+    dtinfo = get_data_type_meta_data(maria_engine, 'Uebung_Datenbanken_SS2024')
+    tbm = TableMetaData(maria_engine, 'Uebung_Datenbanken_SS2024', ['Matrikelnummer'], dtinfo, 11)
+    postgres_engine = connect_to_db('postgres', 'arc-en-ciel', 'localhost', 5432, 'PostgresTest1', 'postgresql', 'UTF8')
+    table_name = 'Vorlesung_Datenbanken_SS2024'
+    primary_keys = get_primary_key_from_engine(postgres_engine, table_name)
+    data_type_info = get_data_type_meta_data(postgres_engine, table_name)
+    row_count = get_row_count_from_engine(postgres_engine, table_name)
+    tbm2 = TableMetaData(postgres_engine, table_name, primary_keys, data_type_info, row_count)
+    print('SIMULATRE', simulate_merge_and_build_query(tbm2, tbm, ['Matrikelnummer', 'Matrikelnummer'], 'Punktzahl'))
+    maria_replacement_info = get_replacement_information(tbm, [('Matrikelnummer', 0), ('Vorname', 1), ('Nachname', 0)], 'Jo', 'Jojo')
+    print('MRI: ', maria_replacement_info)
     app.secret_key = os.urandom(12)
     serve(app, host = '0.0.0.0', port = 8000)
     
