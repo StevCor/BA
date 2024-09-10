@@ -24,20 +24,20 @@ def search_string(table_meta_data:TableMetaData, string_to_search:str, columns_t
     concatenated_string = get_concatenated_string_for_matching(dialect, 'string_to_search')
     # Aufbau der Bedingung für die Suche
     sql_condition = 'WHERE'
-    # Iteriere durch alle Attribute in der ausgewählten Tabelle, ...
+    # Iteration durch alle Attribute in der ausgewählten Tabelle
     for column_name in columns_to_search:
-        # ... und versieh sie mit doppelten Anführungszeichen, wenn sie Großbuchstaben (PostgreSQL) oder Leerzeichen enthalten (MariaDB und PostgreSQL).
+        # Sie werden mit doppelten Anführungszeichen versehen, wenn sie Großbuchstaben (PostgreSQL) oder Leerzeichen enthalten (MariaDB und PostgreSQL).
         attribute_to_search = convert_string_if_contains_capitals_or_spaces(column_name, dialect).strip()
         # Wenn sie nicht textbasiert sind, ...
         if table_meta_data.get_data_type_group(column_name) != 'text':
-            # ... konvertiere sie in den dialektspezifischen Textdatentyp.
+            # ... werden sie in den dialektspezifischen Textdatentyp konvertiert.
             attribute_to_search = f'CAST({attribute_to_search} AS {cast_data_type})'
         if sql_condition == 'WHERE':
-            # Hänge das zu durchsuchende Attribut und den regulären Ausdruck für die Suche an die Bedingung an.
+            # Anängen des zu durchsuchenden Attributs und des regulären Ausdrucks für die Suche an die Bedingung 
             sql_condition = f"{sql_condition} {attribute_to_search} {operator} {concatenated_string}"
         # Handelt es sich nicht um das erste Attribut, ...
         else:
-            # ... ergänze hierbei noch den Operator 'OR'.
+            # ... wird hierbei noch der Operator 'OR' ergänzt.
             sql_condition = f"{sql_condition} OR {attribute_to_search} {operator} {concatenated_string}"
     # Zusammenfügen der Abfrage für die Suche 
     query = text(f"SELECT * FROM {table_name} {sql_condition}")
@@ -45,18 +45,17 @@ def search_string(table_meta_data:TableMetaData, string_to_search:str, columns_t
     params = {'string_to_search': string_to_search}
     # Wenn der SQL-Dialekt entweder PostgreSQL oder MariaDB ist, ...
     if dialect == 'postgresql' or dialect == 'mariadb':
-        # ... führe die Abfrage aus und konvertiere das Ergebnis in eine Liste von Listen.
+        # ... wird die Abfrage ausgeführt und das Ergebnis in eine Liste von Listen konvertiert.
         result = convert_result_to_list_of_lists(execute_sql_query(engine, query, params))
-    # Anderenfalls ...
     else:
-        # ... gib eine Meldung aus, dass der gewählte SQL-Dialekt nicht unterstützt wird.
+        # Anderenfalls wird eine Meldung ausgegeben, dass der gewählte SQL-Dialekt nicht unterstützt wird.
         raise DialectError(f'Der SQL-Dialekt {dialect} wird nicht unterstützt.')
     return result
 
 
 ### Funktionen für das Ersetzen von (Teil-)Strings ###
 
-def get_replacement_information(table_meta_data:TableMetaData, affected_attributes_and_positions:list, old_value:str, replacement:str):
+def get_replacement_information(table_meta_data:TableMetaData, affected_attributes_and_positions:list[tuple[str, int:0|1]], old_value:str, replacement:str):
     cols_and_dtypes = table_meta_data.data_type_info
     if len(affected_attributes_and_positions) != len(cols_and_dtypes.keys()):
         raise ArgumentError(None, 'Für alle Attribute der Tabelle muss angegeben sein, ob sie von der Änderung betroffen sein können oder nicht.')

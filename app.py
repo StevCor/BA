@@ -6,9 +6,9 @@ from ControllerClasses import TableMetaData
 from controllerFunctions import check_validity_of_input_and_searched_value, show_both_tables_separately, update_TableMetaData_entries
 from model.SQLDatabaseError import DatabaseError, DialectError
 from model.loginModel import register_new_user, login_user 
-from model.databaseModel import check_data_type_meta_data, connect_to_db, convert_result_to_list_of_lists, get_primary_key_from_engine, get_row_count_from_engine, list_all_tables_in_db_with_preview, get_full_table_ordered_by_primary_key
+from model.databaseModel import get_data_type_meta_data, connect_to_db, convert_result_to_list_of_lists, get_primary_key_from_engine, get_row_count_from_engine, list_all_tables_in_db_with_preview, get_full_table_ordered_by_primary_key
 from model.oneTableModel import get_replacement_information, get_row_number_of_affected_entries, get_unique_values_for_attribute, replace_all_string_occurrences, replace_some_string_occurrences, search_string, update_to_unify_entries
-from model.twoTablesModel import check_basic_data_type_compatibility, execute_merge_and_add_constraints, join_tables_of_different_dialects_dbs_or_servers, join_tables_of_same_dialect_on_same_server, simulate_merge_and_build_query
+from model.twoTablesModel import check_basic_data_type_compatibility, execute_merge_and_add_constraints, get_full_column_definition_for_mariadb, join_tables_of_different_dialects_dbs_or_servers, join_tables_of_same_dialect_on_same_server, simulate_merge_and_build_query
 
 # globale Variablen für den Datenbankzugriff
 global engine_1
@@ -183,7 +183,7 @@ def select_tables():
         engine = engine_2
     for table_name in table_names:
         primary_keys = get_primary_key_from_engine(engine, table_name)
-        data_type_info = check_data_type_meta_data(engine, table_name)
+        data_type_info = get_data_type_meta_data(engine, table_name)
         total_row_count = get_row_count_from_engine(engine, table_name)
         if tables_in_use == 0:
             tables_in_use += 1

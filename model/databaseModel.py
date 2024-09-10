@@ -10,7 +10,6 @@ def connect_to_db(username:str, password:str, host:str, port:int, db_name:str, d
     db_url = f'{username}:{urllib.parse.quote_plus(password)}@{host}:{str(port)}/{urllib.parse.quote_plus(db_name)}'
     engine_url = str()
     engine = None
-    message = ''
     if(db_dialect == 'mariadb'):
         engine_url = f'{db_dialect}+pymysql://{db_url}?charset={db_encoding.lower()}'
     elif(db_dialect == 'postgresql'):
@@ -23,7 +22,6 @@ def connect_to_db(username:str, password:str, host:str, port:int, db_name:str, d
         test_engine = create_engine(engine_url)
     elif db_dialect == 'postgresql': 
         test_engine = create_engine(engine_url, connect_args = {'client_encoding': {db_encoding}})
-
 
     # Verbindung testen - mögliche Fehler:
     # psycopg2.OperationalError bei falschen Angaben für Servername, Portnummer oder Encoding
@@ -59,7 +57,7 @@ def list_all_tables_in_db_with_preview(engine:Engine):
     elif engine.dialect.name == 'mariadb':
         query = text("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_TYPE LIKE 'BASE_TABLE' AND TABLE_SCHEMA = DATABASE()")
     else:
-        return None
+        raise DialectError(f'Der SQL-Dialekt {engine.dialect.name} wird nicht unterstützt.')
     result = execute_sql_query(engine, query)
     tables_without_keys = []
     for row in result:
@@ -73,14 +71,17 @@ def list_all_tables_in_db_with_preview(engine:Engine):
         preview_list = convert_result_to_list_of_lists(preview_result)
         table_names_and_columns[current_table] = column_names
         table_previews[current_table] = preview_list
+    print(table_names_and_columns)
     return table_names_and_columns, table_previews, tables_without_keys
  
 def get_full_table_ordered_by_primary_key(table_meta_data:TableMetaData, convert:bool = True):
     engine = table_meta_data.engine
     db_dialect = engine.dialect.name
+    if db_dialect != 'mariadb' and db_dialect != 'postgresql':
+        raise DialectError(f'Der SQL-Dialekt {db_dialect} wird nicht unterstützt.')
     table_name = convert_string_if_contains_capitals_or_spaces(table_meta_data.table_name, db_dialect)
     primary_keys = table_meta_data.primary_keys
-    keys_for_ordering = ', '.join(primary_keys)
+    keys_for_ordering = ', '.join([convert_string_if_contains_capitals_or_spaces(key, db_dialect) for key in primary_keys])
     query = text(f'SELECT * FROM {table_name} ORDER BY {keys_for_ordering}')
     if convert:
         return convert_result_to_list_of_lists(execute_sql_query(engine, query))
@@ -88,6 +89,8 @@ def get_full_table_ordered_by_primary_key(table_meta_data:TableMetaData, convert
         return execute_sql_query(engine, query)
 
 def get_row_count_from_engine(engine:Engine, table_name:str):
+    if engine.dialect.name not in ('mariadb', 'postgresql'):
+        raise DialectError(f'Der SQL-Dialekt {engine.dialect.name} wird nicht unterstützt.')
     table_name = convert_string_if_contains_capitals_or_spaces(table_name, engine.dialect.name)
     # https://datawookie.dev/blog/2021/01/sqlalchemy-efficient-counting/
     query = text(f'SELECT COUNT(1) FROM {table_name}')
@@ -115,12 +118,11 @@ def check_database_encoding(engine:Engine):
         if res.rowcount == 1:
             encoding = ''.join(res.one())
     elif engine.dialect.name == 'mariadb':
-        execute_sql_query
-        # with engine.connect() as connection:
-        #     result = connection.execute(text("SHOW VARIABLES LIKE 'character_set_database'"))
         query = text("SHOW VARIABLES LIKE 'character_set_database'")
         result = execute_sql_query(engine, query)
         encoding = result.one()[1]
+    else:
+        raise DialectError(f'Der SQL-Dialekt {engine.dialect.name} wird nicht unterstützt.')
     return encoding
 
 def execute_sql_query(engine:Engine, query:text, params:dict = None, raise_exceptions:bool = False, commit:bool = None):
@@ -139,7 +141,6 @@ def execute_sql_query(engine:Engine, query:text, params:dict = None, raise_excep
             result = connection.execute(query, params)
     except Exception as error:
         if raise_exceptions:
-            print(type(error), str(error))
             raise error
         else:
             print(str(error))
@@ -167,8 +168,7 @@ def get_primary_key_from_engine(engine:Engine, table_name:str):
     elif engine.dialect.name == 'mariadb':
         query = text(f"SELECT COLUMN_NAME as column_name FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{table_name}' AND COLUMN_KEY = 'PRI'")
     else: 
-        print('Dialekt wird nicht unterstützt.')
-        return None
+        raise DialectError(f'Der SQL-Dialekt {engine.dialect.name} wird nicht unterstützt.')
     result = execute_sql_query(engine, query)
 
     key_list = list()
@@ -195,9 +195,9 @@ def convert_result_to_list_of_lists(sql_result:CursorResult):
     result_list = [list(row) for row in sql_result.all()]
     return result_list  
 
-def check_data_type_meta_data(engine:Engine, table_name:str):
+def get_data_type_meta_data(engine:Engine, table_name:str):
     if not type(engine) == Engine or not type(table_name) == str :
-        raise ArgumentError('Zum Ausführen dieser Funktion sind eine Engine und ein Tabellenname vom Typ String erforderlich.')
+        raise ArgumentError(None, 'Zum Ausführen dieser Funktion sind eine Engine und ein Tabellenname vom Typ String erforderlich.')
     db_dialect = engine.dialect.name
     result_dict = {}
     query = 'SELECT COLUMN_NAME, COLUMN_DEFAULT, IS_NULLABLE, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, DATETIME_PRECISION'
@@ -208,10 +208,11 @@ def check_data_type_meta_data(engine:Engine, table_name:str):
         query = f"{query} FROM information_schema.columns WHERE TABLE_CATALOG = '{engine.url.database}'"
     else:
         raise DialectError('Dieser SQL-Dialekt wird nicht unterstüzt.')
-    table_name = convert_string_if_contains_capitals_or_spaces(table_name, db_dialect)
     query = f"{query} AND TABLE_NAME = '{table_name}'"
    
     result = convert_result_to_list_of_lists(execute_sql_query(engine, text(query)))
+    
+    table_name = convert_string_if_contains_capitals_or_spaces(table_name, db_dialect)
     print('QUERY: ', query)
     # für PostgreSQL fehlt noch die Angabe, ob es sich um einen Primärschlüssel oder ein Attribut mit Unique-Constraint handelt
     if db_dialect == 'postgresql':
@@ -287,6 +288,7 @@ if __name__ == '__main__':
     for line in yo:
         print('line: ', line)
     maria_engine = connect_to_db('root', 'arc-en-ciel', 'localhost', 3306, 'test', 'mariadb', 'utf8')
+    print()
     res = maria_engine.connect().execute(text("SELECT * FROM information_schema.columns WHERE TABLE_NAME = 'studierende';"))
     for row in res:
         print(row)

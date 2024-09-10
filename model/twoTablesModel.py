@@ -1,4 +1,5 @@
 from argparse import ArgumentError
+import re
 from dateutil import parser
 from math import ceil
 from sqlalchemy import Engine, bindparam, text
@@ -116,7 +117,7 @@ def join_tables_of_same_dialect_on_same_server(table_meta_data:list[TableMetaDat
 
     ### Ausführung des Joins ###
     # Erstellung der Anfrage für einen Full Outer Join, falls gewünscht 
-    if full_outer_join:
+    if full_outer_join == True:
         if dialect_1 == 'mariadb':
             # Für MariaDB wird hierfür die Vereinigungsmenge zwischen einem Left Outer Join und einem Right Outer Join jeweils auf den beiden Join-Attributen gebildet.
             join_query = f'{join_query} FROM {table_1} LEFT OUTER JOIN {table_2} ON {join_attribute_1} = {join_attribute_2} UNION ({join_query} FROM {table_1} RIGHT OUTER JOIN {table_2} ON {join_attribute_1} = {join_attribute_2})'
@@ -468,10 +469,11 @@ def force_cast_and_match(data_type_group_1:str, data_type_group_2:str, values_to
             return True, value_2
     return False
 
-"""Führt einen Join zweier Tabellen über zwei Attribute aus und fügt die Werte eines ausgewählten Attributes in eine bestehende oder neu erstellte Spalte der Zieltabelle ein.
 
-Gibt einen ArgumentError aus, wenn die Parameter ungeeignet sind oder die Attributnamen nicht korrekt zugeordnet werden können."""
-def simulate_merge_and_build_query(target_table_data:TableMetaData, source_table_data:TableMetaData, attributes_to_join_on:list[str], source_attribute_to_insert:str, target_column:str|None, cast_direction:int, new_attribute_name:str|None, add_table_names_to_column_names:bool = True):
+def simulate_merge_and_build_query(target_table_data:TableMetaData, source_table_data:TableMetaData, attributes_to_join_on:list[str], source_attribute_to_insert:str, target_column:str = None, cast_direction:int = 0, new_attribute_name:str = None, add_table_names_to_column_names:bool = True):
+    """Führt einen Join zweier Tabellen über zwei Attribute aus und fügt die Werte eines ausgewählten Attributes in eine bestehende oder neu erstellte Spalte der Zieltabelle ein.
+    
+    Gibt einen ArgumentError aus, wenn die Parameter ungeeignet sind oder die Attributnamen nicht korrekt zugeordnet werden können."""
     ### Überprüfung, ob die übergebenen Argumente die erwartete Form und die erwarteten Inhalte haben ###
     if type(target_table_data) != TableMetaData or type(source_table_data) != TableMetaData:
         raise ArgumentError(None, 'Die Parameter target_table_data und source_table_data müssen vom Typ TableMetaData sein.')
@@ -653,15 +655,19 @@ def simulate_merge_and_build_query(target_table_data:TableMetaData, source_table
         for key in target_table_data.primary_keys:
             # ... welchem der Attribute im Join-Ergebnis es entspricht.
             for index, attribute in enumerate(joined_column_names):
-                # Wurde das entsprechende Attribut gefunden, ...
-                if attribute == key:
+                # Wurde das entsprechende Attribut gefunden, ggf. mit vorangestelltem Tabellennamen ...
+                if attribute == key or (add_table_names_to_column_names and attribute == f'{target_table_data.table_name}.{key}'):
                     # ... wird die Position als Primärschlüsselattributindex gespeichert ...
                     pk_indexes.append(index)
                     # ... ebenso wie der ggf. mit Anführungszeichen versehene Attributname.
                     escaped_pk_columns.append(convert_string_if_contains_capitals_or_spaces(key, target_dialect))
         # Außerdem wird die Position des Quellattributs im Join-Ergebnis benötigt.
-        source_attribute_index = joined_column_names.index(source_attribute_to_insert)
-        
+        # Wenn der Tabellenname in der Liste der anzuzeigenden Namen hinzugefügt wurde, muss dies hier ebenfalls berücksichtigt werden.
+        if add_table_names_to_column_names:
+            source_attribute_index = joined_column_names.index(f'{source_table_data.table_name}.{source_attribute_to_insert}')
+        else:
+            # Anderenfalls wird lediglich der Index des einzufügenden Attributs in der Attributliste nachgeschlagen.
+            source_attribute_index = joined_column_names.index(source_attribute_to_insert)
 
         target_attribute = convert_string_if_contains_capitals_or_spaces(target_attribute, target_dialect)
         target_table = convert_string_if_contains_capitals_or_spaces(target_table, target_dialect)
@@ -670,7 +676,7 @@ def simulate_merge_and_build_query(target_table_data:TableMetaData, source_table
         # Dabei werden die Werte gezählt, die nicht den Wert 'NULL' haben.
         not_null_counter =  0
         for row in joined_result:
-            # Falls der einzutragende Wert 'None' lautet, wird dies mit der abschließenden Bedingung 'ELSE DEFAULT' abgefangen.
+            # Falls der einzutragende Wert 'None' lautet, muss nichts in die Datenbank eingetragen werden.
             if row[source_attribute_index] is None:
                 # Somit kann diese Iteration der Schleife übersprungen werden.
                 continue
@@ -685,19 +691,22 @@ def simulate_merge_and_build_query(target_table_data:TableMetaData, source_table
                 # Zähler für Nicht-NULL-Werte erhöhen
                 not_null_counter += 1
                 # Die einzutragenden Werte werden jeweils über die Primärschlüsselwerte des Tupels identifiziert.
-                for pk_index, key in enumerate(escaped_pk_columns):
+                for index, key in enumerate(escaped_pk_columns):
                     # Falls die Tabelle mehr als ein Primärschlüsselattribut hat und es sich nicht um das erste handelt, ...
-                    if pk_index != 0:
+                    if index != 0:
                         # ... werden die Bedingungen für Primärschlüsselwerte mit AND verknüpft.
                         condition = f'{condition} AND'
-                    condition = f'{condition} {key} = {row[pk_index]}'
+                    # Hinzufügen des abzugleichenden Primärschlüsselwertes
+                    condition = f'{condition} {key} = {row[pk_indexes[index]]}'
+                # Hinzufügen des einzufügenden Wertes zum Parameter-Dictionary
                 params['value_' + str(not_null_counter)] = row[source_attribute_index]
+                # Einfügen des neuen Wertes in die Abfrage
                 update_query = f"{update_query} {condition} THEN :{'value_' + str(not_null_counter)}"
         # Wenn mindestens einer der einzutragenden Werte nicht 'NULL' ist, ...
         if not_null_counter > 0:
-            # ... wird die Case-Anweisung damit abgeschlossen, dass alle Einträge des Zielattributs ohne Wert in der Quelltabelle auf den Standardwert gesetzt werden.
-            update_query = f'{update_query} ELSE DEFAULT END;'
-        # Anderenfalls werden alle Werte des eingefügten Attributs auf den Standardwert gesetzt.
+            # ... wird die Case-Anweisung mit 'END' abgeschlossen.
+            update_query = f'{update_query} END;'
+        # Anderenfalls werden der Vollständigkeit halber alle Werte des eingefügten Attributs auf den Standardwert gesetzt. (Passiert auch automatisch beim Anlegen des Attributs)
         else:
             update_query = f'{update_query} DEFAULT;'
 
@@ -879,24 +888,47 @@ def add_constraints_to_new_attribute(target_table_meta_data:TableMetaData, sourc
     return message
 
 
-def get_full_column_definition_for_mariadb(table_meta_data:TableMetaData, attribute_name:str, ):
+def get_full_column_definition_for_mariadb(table_meta_data:TableMetaData, attribute_name:str):
+    """Gibt den Ausdruck aus, mit dem das angegebene Attribut in MariaDB angelegt werden kann.
+    
+    table_meta_data: Objekt vom Typ TableMetaData mit der zugehörigen Engine (SQL-Dialekt MariaDB, sonst Ausgabe eines DialectErrors)
+    attribute_name: Attribut, dessen Ausdruck abgerufen werden soll; muss in der Attributliste von table_meta_data enthalten sein, sonst wird ein ArgumentError ausgegeben."""
+    
+    # Ausgabe eines ArgumentErrors, wenn das angegebene Attribut nicht in der Attributliste des TableMetaData-Objekts enthalten ist
     if attribute_name not in table_meta_data.columns:
         raise ArgumentError(None, 'Das zu betrachtende Attribut muss in der angegebenen Tabelle enthalten sein.')
     engine = table_meta_data.engine
     table_name = table_meta_data.table_name
+    # Ausgabe eines DialectErrors, wenn die Engine nicht zu einer MariaDB-Datenbank gehört
     if engine.dialect.name != 'mariadb':
         raise DialectError(f'Der SQL-Dialekt {engine.dialect.name} wird in dieser Funktion nicht unterstützt.')
+    # Abruf des Ausdrucks für die Erstellung der vollen Tabelle
     result = execute_sql_query(engine, text(f'SHOW CREATE TABLE {table_name}'))
+    # Wenn die Tabelle existiert, ...
     if result is not None:
+        # ... wird der Ausdruck an den Kommas aufgeteilt.
         create_statements = str(result.fetchone()[1]).split(',')
+        # Diese Zeilen werden nun nach dem Ausdruck für das Anlegen des angegebenen Attributs durchsucht
         for statement in create_statements:
-            # Die erste mit dem Namen des gesuchten Attributs beginnende Zeile in der 'CREATE-TABLE'-Anweisung enthält dessen Definition
-            if statement.startswith(attribute_name) or statement.startswith(f'"{attribute_name}"'):
+            # Für die erste Zeile muss hier noch der Ausdruck 'CREATE TABLE .... (' entfernt werden
+            if statement.startswith('CREATE'):
+                statement = re.sub(r'CREATE.*?[(]', '', statement).strip()
+            # Für die letzte Zeile hingegen ...
+            elif statement == create_statements[-1]:
+                # ... muss alles nach der letzten schließenden Klammer ...
+                substring_to_delete = statement[statement.rfind(')'):-1]
+                # ... entfernt werden.
+                statement = statement.replace(substring_to_delete, '')
+            # Die erste mit dem Namen des gesuchten Attributs beginnende Zeile in der 'CREATE-TABLE'-Anweisung enthält dessen Definition ...
+            if statement.strip().startswith(attribute_name) or statement.strip().startswith(f'"{attribute_name}"'):
+                # ... und wird daher ausgegeben.
                 return statement
     return None
 
 
 def check_arguments_for_joining(table_meta_data:list[TableMetaData], attributes_to_join_on:list[str], attributes_to_select_1:list[str], attributes_to_select_2:list[str], cast_direction:int = None):
+    if any([type(item) != TableMetaData for item in table_meta_data]):
+        raise TypeError(None, 'Die Tabellenmetadaten müssen vom Typ TableMetaData sein.')
     engine_1 = table_meta_data[0].engine
     engine_2 = table_meta_data[1].engine
     dialect_1 = engine_1.dialect.name
@@ -909,10 +941,9 @@ def check_arguments_for_joining(table_meta_data:list[TableMetaData], attributes_
         raise ArgumentError(None, 'Es müssen exakt zwei Tabellen angegeben werden, die verbunden werden sollen.')
     elif len(attributes_to_select_1) + len(attributes_to_select_2) == 0:
         raise ArgumentError(None, 'Es muss mindestens ein Attribut ausgewählt werden, das zurückgegeben werden soll.')
-    elif cast_direction not in (0, 1, 2):
+    elif cast_direction is not None and cast_direction not in (0, 1, 2):
         raise ArgumentError(None, 'Bitte geben Sie den Wert 1 an, wenn das Verbindungsattribut von Tabelle 1 konvertiert werden soll, 2 für eine Konversion des Verbindungsattributs von Tabelle 2 und für das Auslassen von Konversionen den Wert None.')
-    elif any([type(item) != TableMetaData for item in table_meta_data]):
-        raise TypeError(None, 'Die Tabellenmetadaten müssen vom Typ TableMetaData sein.')
+    
 
 def list_attributes_to_select(attributes_to_select:list[str], dialect:str, table_name:str = None, db_name:str = None):
     attribute_string = ''
@@ -937,7 +968,7 @@ def list_attributes_to_select(attributes_to_select:list[str], dialect:str, table
         print(attribute_string)
     return attribute_string
 
-def check_data_type_meta_data(engines:list[Engine], table_names:list[str]):
+def get_data_type_meta_data(engines:list[Engine], table_names:list[str]):
     if not 0 < len(engines) <= 2 or len(table_names) != 2:
         raise ArgumentError('Es können nur eine Engine mit zwei Tabellen oder zwei Engines mit jeweils einer Tabelle überprüft werden.')
     result_dict = {}
