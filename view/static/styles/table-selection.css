@@ -12,7 +12,7 @@ body {
 }
 
 
-/* Info-Icon taken from https://stackoverflow.com/questions/33878539/is-there-an-html-entity-for-an-info-icon */
+/* Info-Icon übernommen von https://stackoverflow.com/questions/33878539/is-there-an-html-entity-for-an-info-icon */
 .tip {
     position: relative;
     display: inline-block;
@@ -26,17 +26,17 @@ body {
     text-align: center;
     border-radius: 6px;
     padding: 5px 0;
-
-    /* Position the tooltip */
+    /* Positionierung des Tipps */
     position: absolute;
     z-index: 1;
 }
 
+/* Anzeige des Tipptextes bei Mouse-over über dem Icon */
 .tip:hover .tiptext {
     visibility: visible;
 }
 
-
+/* Darstellung der Box, in der die Elemente für die Auswahl der Tabellen angezeigt werden */
 .selecttable {
     border-radius: 5px;
     padding: 20px;
@@ -53,6 +53,7 @@ body {
 
 }
 
+/* Darstellung der Überschrift der ersten Ebene */
 .selecttable h1 {
     text-align: center;
     color: #006ab3;
@@ -61,16 +62,19 @@ body {
     border-bottom: 1px solid #dee0e4;
 }
 
+/* Darstellung der Überschriften der dritten Ebene */
 .selecttable h3 {
     text-align: center;
 }
 
+/* mittige Darstellung des Formulars */
 .selecttable form {
     display: block;
     justify-content: center;
     padding-top: 20px;
 }
 
+/* Darstellung des Absende-Buttons wie im Login-Formular */
 .selecttable form input[type="submit"] {
     width: 100%;
     padding: 12px;
@@ -83,31 +87,34 @@ body {
     transition: background-color 0.2s;
 }
 
+/* Darstellung der (Fehler-)Meldungen */
 .msg {
     text-align: center;
 }
 
+/* Darstellung der Buttons nebeneinander */
 .selecttable .buttons {
     display: inline-flex;
 }
 
-/*All modal-related stuff from https://www.w3schools.com/howto/tryit.asp?filename=tryhow_css_modal*/
+/*** Alle modal-bezogenen Elemente übernommen von https://www.w3schools.com/howto/tryit.asp?filename=tryhow_css_modal ***/
+
 .modal {
+    /* standardmäßig ausgeblendet */
     display: none;
-    /* Hidden by default */
+    /* obenauf platziert */
     z-index: 1;
-    /* Sit on top */
     padding-top: 100px;
+    /* volle Anzeigebreite */
     width: 100%;
-    /* Full width */
+    /* volle Anzeigehöhe */
     height: 100%;
-    /* Full height */
+    /* Hinzufügen einer Scroll-Leiste, wenn der Inhalt länger ist als der Bildschirm gleichzeitig anzeigen kann */
     overflow: auto;
-    /* Enable scroll if needed */
     background-color: rgb(0, 0, 0);
-    /* Fallback color */
+    /* leicht transparentes Schwarz als HIntergrundfarbe */
     background-color: rgba(0, 0, 0, 0.4);
-    /* Black w/ opacity */
+    /* Zentrierung */
     position: absolute;
     top: 50%;
     left: 50%;
@@ -115,11 +122,12 @@ body {
 
 }
 
+/* Darstellung der Überschriften der zweiten Ebene im Modal */
 .modal h2 {
     text-align: center;
 }
 
-/* Modal Content */
+/* Darstellung der Modal-Inhalte (d. h. der Tabellenvorschau) */
 .modal-content {
     background-color: #fefefe;
     margin-left: auto;
@@ -130,7 +138,7 @@ body {
 }
 
 
-/* The Close Button */
+/* Darstellung des Buttons zum Schließen des Modals */
 .close {
     color: #aaaaaa;
     float: right;
@@ -138,53 +146,10 @@ body {
     font-weight: bold;
 }
 
+/* Darstellung des Buttons bei Mouse-over oder anderweitiger Auswahl */
 .close:hover,
 .close:focus {
     color: #000;
     text-decoration: none;
     cursor: pointer;
-}
-
-.navtop {
-    background-color: #2f3947;
-    height: 60px;
-    width: 100%;
-    border: 0;
-}
-
-.navtop div {
-    display: flex;
-    margin: 0 auto;
-    width: 1000px;
-    height: 100%;
-}
-
-.navtop div h1,
-.navtop div a {
-    display: inline-flex;
-    align-items: center;
-}
-
-.navtop div h1 {
-    flex: 1;
-    font-size: 24px;
-    padding: 0;
-    margin: 0;
-    color: #eaebed;
-    font-weight: normal;
-}
-
-.navtop div a {
-    padding: 0 20px;
-    text-decoration: none;
-    color: #c1c4c8;
-    font-weight: bold;
-}
-
-.navtop div a i {
-    padding: 2px 8px 0 0;
-}
-
-.navtop div a:hover {
-    color: #eaebed;
 }

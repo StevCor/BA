@@ -1,16 +1,40 @@
+# Modul für Datenbankoperation unter Verwendung zweier Tabellen
+
 from argparse import ArgumentError
 import re
 from dateutil import parser
-from math import ceil
-from sqlalchemy import Engine, bindparam, text
+from sqlalchemy import bindparam, text
 from ControllerClasses import TableMetaData
-from model.CompatibilityClasses import MariaInt, PostgresInt, get_int_value_by_dialect_name, MariaToPostgresCompatibility, PostgresToMariaCompatibility
-from model.databaseModel import get_primary_key_from_engine, convert_result_to_list_of_lists, execute_sql_query, convert_string_if_contains_capitals_or_spaces
-from model.SQLDatabaseError import DialectError, MergeError, QueryError
-
-
+from model.CompatibilityClasses import MariaToPostgresCompatibility, PostgresToMariaCompatibility
+from model.databaseModel import convert_result_to_list_of_lists, execute_sql_query, convert_string_if_contains_capitals_or_spaces
+from model.SQLDatabaseError import DialectError, MergeError
 
 def join_tables_of_same_dialect_on_same_server(table_meta_data:list[TableMetaData], attributes_to_join_on:list[str], attributes_to_select_1:list[str], attributes_to_select_2:list[str], cast_direction:int = 0, full_outer_join:bool = False, add_table_names_to_column_names:bool = True, return_cast_direction:bool = False):
+    """Erstellung eines Inner oder Outer Joins zweier Tabellen, die in derselben Datenbank (MariaDB und PostgreSQL) oder auf demselben Server 
+    liegen (MariaDB).
+    
+    table_meta_data: Liste mit den zwei TableMetaData-Objekten der Tabellen für den Join
+    
+    attributes_to_join_on: Liste der zwei Join-Attribute als Strings
+    
+    attributes_to_select_1: Liste der auszuwählenden Attributnamen der ersten Tabelle als Strings
+    
+    attributes_to_select_2:l Liste der auszuwählenden Attributnamen der zweiten Tabelle als Strings
+     
+    cast_direction: Integer-Wert, der die Richtung der Typkonversion wiedergibt; 0 für keine (erzwungene) Konversion, 1 für Konversion des
+    Join-Attributs der ersten Tabelle, 2 für Konversion des Join-Attributs der zweiten Tabelle
+    
+    full_outer_join: Boolean-Wert für die Auswahl eines Full Outer Join; standardmäßig False, sodass ein Inner Join erstellt wird
+     
+    add_table_names_to_column_names: Boolean-Wert für das Zusammenfügen der Attributnamen mit den Tabellennamen; standardmäßig True, abwählbar
+    für die Attributsübertragung
+    
+    return_cast_direction: Boolean-Wert für die Auswahl, ob die Konversionsrichtung mit ausgegeben werden soll; standardmäßig False, anwählbar für
+    die Attributsübertragung
+
+    Ausgabe des Join-Results als Liste von Listen, der Attributnamen für die Anzeige als Liste, einer Liste mit der Anzahl von Tupeln ohne Übereinstimmung
+    in der anderen Tabelle und ggf. der Konversionsrichtung; Ausgabe von MergeErrors, DialectErrors, TypeErrors oder ArgumentErrors bei ungeeigneten Argumenten."""
+    
     engine_1 = table_meta_data[0].engine
     engine_2 = table_meta_data[1].engine
     dialect_1 = engine_1.dialect.name
@@ -163,6 +187,32 @@ def join_tables_of_same_dialect_on_same_server(table_meta_data:list[TableMetaDat
         return joined_table_result, column_names_for_display, no_of_unmatched_rows
     
 def join_tables_of_different_dialects_dbs_or_servers(table_meta_data:list[TableMetaData], attributes_to_join_on:list[str], attributes_to_select_1:list[str], attributes_to_select_2:list[str], cast_direction:int = None, full_outer_join:bool = False, add_table_names_to_column_names:bool = True):
+    """Erstellung eines Inner oder Outer Joins zweier Tabellen, die in verschiedenen Datenbanken (PostgreSQL) oder auf verschiedenen Servern liegen 
+    (MariaDB und PostgreSQL) oder verschiedene SQL-Dialekte aufweisen (Python-basierter Join). 
+    
+    table_meta_data: Liste mit den zwei TableMetaData-Objekten der Tabellen für den Join
+    
+    attributes_to_join_on: Liste der zwei Join-Attribute als Strings
+    
+    attributes_to_select_1: Liste der auszuwählenden Attributnamen der ersten Tabelle als Strings
+    
+    attributes_to_select_2:l Liste der auszuwählenden Attributnamen der zweiten Tabelle als Strings
+     
+    cast_direction: Integer-Wert, der die Richtung der Typkonversion wiedergibt; 0 (oder None) für keine (erzwungene) Konversion, 1 für Konversion des
+    Join-Attributs der ersten Tabelle, 2 für Konversion des Join-Attributs der zweiten Tabelle
+    
+    full_outer_join: Boolean-Wert für die Auswahl eines Full Outer Join; standardmäßig False, sodass ein Inner Join erstellt wird
+     
+    add_table_names_to_column_names: Boolean-Wert für das Zusammenfügen der Attributnamen mit den Tabellennamen; standardmäßig True, abwählbar
+    für die Attributsübertragung
+    
+    return_cast_direction: Boolean-Wert für die Auswahl, ob die Konversionsrichtung mit ausgegeben werden soll; standardmäßig False, anwählbar für
+    die Attributsübertragung
+
+    Ausgabe des Join-Results als Liste von Listen, der Attributnamen für die Anzeige als Liste, einer Liste mit der Anzahl von Tupeln ohne Übereinstimmung
+    in der anderen Tabelle und ggf. der Konversionsrichtung; Ausgabe von MergeErrors, DialectErrors, TypeErrors oder ArgumentErrors bei ungeeigneten Argumenten."""
+    
+    # Überprüfung der Eignung der Argumente
     try:
         check_arguments_for_joining(table_meta_data, attributes_to_join_on, attributes_to_select_1, attributes_to_select_2, cast_direction)
     except Exception as error:
@@ -405,17 +455,37 @@ def join_tables_of_different_dialects_dbs_or_servers(table_meta_data:list[TableM
     return joined_table, column_names_for_display, no_of_unmatched_rows
 
 def force_cast_and_match(data_type_group_1:str, data_type_group_2:str, values_to_match:list, cast_direction:int):
+    """Erzwingen der Typkonversion für den Python-basierten Join mit gleichzeitiger Überprüfung der Übereinstimmung
+    
+    data_type_group_1: Datentypgruppe des ersten zu überprüfenden Attributs als String ('boolean', 'integer', 'decimal', 'text' oder 'date')
+    
+    data_type_group_2: Datentypgruppe des zweiten  zu überprüfenden Attributs als String ('boolean', 'integer', 'decimal', 'text' oder 'date')
+    
+    values_to_match: Liste der Werte, die miteinander verglichen werden sollen
+    
+    cast_direction: Integer-Wert, der die Richtung der Typkonversion wiedergibt; 1 für Konversion des Attributs der ersten Tabelle, 2 für 
+    Konversion des Attributs der zweiten Tabelle
+    
+    Ausgabe des Wertes False, wenn keine Übereinstimmung besteht; eines Tupels aus True und des konvertierten Wertes bei Übereinstimmung; 
+    ArgumentErrors bei fehlerhaften Argumenten."""
+
+    # Überprüfung der Eignung der Argumente
     if cast_direction not in (1, 2):
         raise ArgumentError(None, 'Der Parameter cast_direction darf nur die Werte 1 oder 2 annehmen.')
     elif data_type_group_1 not in ['boolean', 'integer', 'decimal', 'text', 'date'] or data_type_group_2 not in ['boolean', 'integer', 'decimal', 'text', 'date']:
         raise ArgumentError(None, 'Mit dieser Funktion können nur Werte überprüft werden, die den Datentypgruppen boolean, integer, decimal, text oder date angehören.')
+    # Beziehen der zu vergleichenden Werte
     value_1 = values_to_match[0]
     value_2 = values_to_match[1]
+    ### erzwungene Typkonversion für das erste Attribut ###
     if cast_direction == 1:
         if data_type_group_2 == 'integer':
             try:
+                # Das erste Attribut wird jeweils in das Python-Äquivalent des Datentyps des zweiten Attributs zu konvertieren versucht.
                 value_1 = int(value_1)
+            # Treten hierbei Fehler auf, ...
             except ValueError:
+                # ... liegt keine Übereinstimmung vor.
                 return False
         elif data_type_group_2 == 'boolean':
             try:
@@ -437,8 +507,12 @@ def force_cast_and_match(data_type_group_1:str, data_type_group_2:str, values_to
                 value_1 = parser.parse(value_1)
             except (ValueError, TypeError, parser.ParserError):
                 return False
+        # Wenn keine Fehler aufgetreten sind, werden die beiden Werte miteinander verglichen ...
         if value_1 == value_2:
+            # ... und bei Übereinstimmung wird ein Tupel aus True und dem konvertierten Wert ausgegeben.
             return True, value_1
+        
+    ### Die erzwungene Typkonversion für das zweite Attribut erfolgt analog. ###
     elif cast_direction == 2:
         if data_type_group_1 == 'integer':
             try:
@@ -467,13 +541,34 @@ def force_cast_and_match(data_type_group_1:str, data_type_group_2:str, values_to
                 return False
         if value_1 == value_2:
             return True, value_2
+    # Alles, was außerhalb dieser Überprüfungen liegt, wird als fehlende Übereinstimmung gewertet.
     return False
 
 
 def simulate_merge_and_build_query(target_table_data:TableMetaData, source_table_data:TableMetaData, attributes_to_join_on:list[str], source_attribute_to_insert:str, target_column:str = None, cast_direction:int = 0, new_attribute_name:str = None, add_table_names_to_column_names:bool = True):
     """Führt einen Join zweier Tabellen über zwei Attribute aus und fügt die Werte eines ausgewählten Attributes in eine bestehende oder neu erstellte Spalte der Zieltabelle ein.
     
-    Gibt einen ArgumentError aus, wenn die Parameter ungeeignet sind oder die Attributnamen nicht korrekt zugeordnet werden können."""
+    target_table_data: TableMetaData-Objekt der Tabelle, in die das Attribut übertragen werden soll
+    
+    source_table_data: TableMetaData der Tabelle, aus der das zu übertragende Attribut stammt
+    
+    attributes_to_join_on: Liste der beiden Attributnamen, über die der Join erfolgen soll
+    
+    source_attribute_to_insert: Name des Attributs der Zieltabelle, das übertragen werden soll
+    
+    target_column: bestehendes Attribut der Zieltabelle, in das die neuen Werte eingetragen werden sollen (optional) 
+    
+    cast_direction: cast_direction: Integer-Wert, der die Richtung der Typkonversion wiedergibt; 0 für keine (erzwungene) Typkonversion, 
+    1 für Konversion des Attributs der ersten Tabelle, 2 für Konversion des Attributs der zweiten Tabelle
+    
+    new_attribute_name: Name des neu einzufügenden Attributs; nur anzugeben, wenn kein Attribut der Zieltabelle angegeben ist, das die Werte
+    aufnehmen soll
+    
+    add_table_names_to_column_names: Boolean-Wert für das Zusammenfügen der Attributnamen mit den Tabellennamen
+
+    Ausgabe der aktualisierten Tabelle, der Abfrage für deren Erstellung und der dafür benötigten Parameter; Ausgabe eines ArgumentErros, 
+    wenn die Argumente ungeeignet sind oder die Attributnamen nicht korrekt zugeordnet werden können."""
+
     ### Überprüfung, ob die übergebenen Argumente die erwartete Form und die erwarteten Inhalte haben ###
     if type(target_table_data) != TableMetaData or type(source_table_data) != TableMetaData:
         raise ArgumentError(None, 'Die Parameter target_table_data und source_table_data müssen vom Typ TableMetaData sein.')
@@ -731,6 +826,17 @@ def simulate_merge_and_build_query(target_table_data:TableMetaData, source_table
         return result, add_and_update_query, params
 
 def build_query_to_add_column(table_meta_data:TableMetaData, attribute_name:str, target_column_data_type_info:dict[str:str]):
+    """Aufbau der Abfrage, mit der das neue Attribut in die Zieltabelle eingefügt wird.
+    
+    table_meta_data: TableMetaData-Objekt der Zieltabelle
+    
+    attribute_name: Name des einzufügenden Attributes
+    
+    target_column_data_type_info: Dictionary mit den Datentypinformationen (Ausgabe der Funktion databaseModel.get_data_type_meta_data)
+
+    Ausgabe der Abfrage für die Erstellung des neuen Attributes als String, ggf. einschließlich zugefügter UNIQUE-Constraints und Standardwerte;
+    Ausgabe eines ArgumentErrors bei ungeeigneten Argumenten."""
+
     # Für die Erstellung der Anweisung zum Einfügen der neuen Spalte werden der Datentyp ...
     if 'data_type' not in target_column_data_type_info.keys():
         raise ArgumentError('Bitte geben Sie den Datentyp für die neue Spalte an.')
@@ -738,6 +844,7 @@ def build_query_to_add_column(table_meta_data:TableMetaData, attribute_name:str,
     if 'data_type_group' not in target_column_data_type_info.keys():
         # Fehlt eine dieser Angaben, wird daher eine Fehlermeldung ausgegeben.
         raise ArgumentError('Bitte geben Sie die Datentypgruppe (z. B. integer, boolean, decimal, text, date) für die neue Spalte an.')
+    
     # Anlegen der nötigen Variablen
     engine = table_meta_data.engine
     db_dialect = engine.dialect.name
@@ -786,36 +893,71 @@ def build_query_to_add_column(table_meta_data:TableMetaData, attribute_name:str,
             data_type = f'{data_type}({datetime_precision})'
             # ... bzw. bei Fehlen ausgelassen, sodass der Wert von der Datenbank automatisch gewählt wird.
     ### Zufügen von Unique-Constraints und Standardwerten ###
-    # Für Unique-Constraints ...
-    if 'is_unique' in target_column_data_type_info.keys() and target_column_data_type_info['is_unique']:
-        # ... wird dem Datentyp das Schlüsselwort UNIQUE angehängt.
-        data_type = f'{data_type} UNIQUE'
-    # Auch der Standardwert kann hier festgelegt werden.
-    default = target_column_data_type_info['column_default']
-    # Wenn nichts angegeben ist, wird dieser automatisch auf 'NULL' gesetzt.
-    # Da der Standardwert ein komplexer Ausdruck sein kann, der sich ggf. auch auf Attribute oder Tabellen bezieht, die nicht übertragen 
-    # werden, wird der Standardwert in dieser ersten Version nur übernommen, wenn es sich hierbei um eine Zahl oder das SQL-Kürzel für den
-    # aktuellen Zeitstempel handelt.
-    if default is not None and (type(default) == int or type(default) == float or 'current_timestamp' in str(default).lower()):
-        data_type = f'{data_type} DEFAULT {default}'
+    # Für Serial-Datentypen sind Unique-Constraints und Standardwerte implizit durch den Datentyp festgelegt, daher können sie hier ausgelassen werden.
+    if 'serial' not in data_type:
+        # Für Unique-Constraints ...
+        if target_column_data_type_info['is_unique']:
+            # ... wird dem Datentyp das Schlüsselwort UNIQUE angehängt.
+            data_type = f'{data_type} UNIQUE'
+        # Auch der Standardwert kann hier festgelegt werden.
+        default = target_column_data_type_info['column_default']
+        # Wenn nichts angegeben ist, wird dieser automatisch auf 'NULL' gesetzt.
+        # Da der Standardwert ein komplexer Ausdruck sein kann, der sich ggf. auch auf Attribute oder Tabellen bezieht, die nicht übertragen 
+        # werden, wird der Standardwert in dieser ersten Version nur übernommen, wenn es sich hierbei um eine Zahl oder das SQL-Kürzel für den
+        # aktuellen Zeitstempel handelt.
+        if default is not None and (type(default) == int or type(default) == float or 'current_timestamp' in str(default).lower()):
+            data_type = f'{data_type} DEFAULT {default}'
 
     # Ausgabe der zusammengefügten Anweisung zum Erstellen des neuen Attributs. Das Semikolon wird hier hinzugefügt, damit diese Anweisung der Update-Anweisung unmittelbar vorangestellt werden kann.
     return f'ALTER TABLE {table_name} ADD COLUMN {attribute_name} {data_type};'
 
 def execute_merge_and_add_constraints(target_table_meta_data:TableMetaData, source_table_meta_data:TableMetaData, target_attribute_name:str, source_attribute_name:str, query:str, params:dict|None):
+    """Ausführung der Attributsübertragung und Hinzufügen von NOT-NULL- und CHECK-Constraints zum neuen Attribut
+    
+    target_table_meta_data: TableMetaData-Objekt der Zieltabelle der Attributsübertragung
+    
+    source_table_meta_data: TableMetaData-Objekt der Quelltabelle der Attributsübertragung
+    
+    target_attribute_name: Name des Attributs, das die übertragenen Werte aufnehmen soll
+    
+    source_attribute_name: Name des Attributs der Quelltabelle, dessen Werte übertragen werden
+    
+    query: SQL-Anweisung für das Einfügen des neuen Attributs (ggf.) und der Übertragung der Werte als String
+    
+    params: Dictionary mit Parametern für die Attributsübertragung, falls nötig; sonst None
+
+    Ausgabe der Meldung zum Einfügen der Constraints bei fehlerfreiem Ablauf; Ausgabe von Exceptions, die bei der Ausführung der 
+    Datenbankoperationen auftreten."""
+
     target_engine = target_table_meta_data.engine
+    # Ausführung der zuvor bei der Simulation erstellten Anweisung für das Einfügen und Füllen des zu übertragenden Attributes
     try:
         execute_sql_query(target_engine, text(query), params = params, raise_exceptions = True, commit = True)
     except Exception as error:
         raise error
     else:
         try:
+            # Übertragen von UNIQUE- und CHECK-Constraints aus der Quelltabelle, falls vorhanden und möglich
+            # Ausgabe der entsprechenden Meldung zur Anzeige in der App
             return add_constraints_to_new_attribute(target_table_meta_data, source_table_meta_data, target_attribute_name, source_attribute_name)
         except Exception as error:
             raise error
 
 
 def add_constraints_to_new_attribute(target_table_meta_data:TableMetaData, source_table_meta_data:TableMetaData, target_attribute_name:str, source_attribute_name:str):
+    """Übertragung von NOT-NULL und CHECK-Constraints des übertragenen Attributs der Quelltabelle in das aufnehmende Attribut der Zieltabelle.
+    
+    target_table_meta_data: TableMetaData-Objekt der Zieltabelle
+    
+    source_table_meta_data: TableMetaData-Objekt der Quelltabelle
+    
+    target_attribute_name: Name des Zielattributes als String
+    
+    source_attribute_name: Name des Quellattributes als String
+
+    Ausgabe der Meldung über den (Miss-)Erfolg beim Einfügen der Constraints; Ausgabe eines DialectErrors bei nicht unterstützten SQL-Dialekten."""
+    
+    # Vorbereitung der Variablen für die Datenbankabfrage
     source_engine = source_table_meta_data.engine
     target_engine = target_table_meta_data.engine
     source_table_name = source_table_meta_data.table_name
@@ -828,6 +970,7 @@ def add_constraints_to_new_attribute(target_table_meta_data:TableMetaData, sourc
         # Überprüfung, ob das Attribut NULL-Werte enthält (MariaDB würde dann beim Hinzufügen der Constraint Werte erzwingen, die nicht NULL sind, und
         # nur eine Warnung ausgeben)
         null_count = execute_sql_query(target_engine, text(f'SELECT COUNT(*) FROM {target_table_name} WHERE {escaped_target_attribute} IS NULL')).fetchone()[0]
+        # Falls NULL-Werte vorhanden sind, kann keine NOT-NULL-Constraint hinzugefügt werden, daher wird dies der ausgegebenen Meldung angehängt.
         if null_count > 0:
             message = f'Dem Attribut {target_attribute_name} kann keine NOT-NULL-Constraint hinzugefügt werden, da darin NULL-Werte enthalten sind.'
         else:
@@ -838,14 +981,18 @@ def add_constraints_to_new_attribute(target_table_meta_data:TableMetaData, sourc
                 data_type = get_full_column_definition_for_mariadb(target_table_meta_data, target_attribute_name)
                 if data_type is not None:
                     query = f'ALTER TABLE {target_table_name} MODIFY {data_type} NOT NULL'
+            # In PostgreSQL wird das Attribut hingegen nur 'auf NOT NULL gesetzt'.                    
             elif target_engine.dialect.name == 'postgresql':
                 query = f'ALTER TABLE {target_table_name} ALTER COLUMN {escaped_target_attribute} SET NOT NULL'
             else:
                 raise DialectError(f'Der SQL-Dialekt {target_engine.dialect.name} wird nicht unterstützt.')
             try:
+                # Ausführen der Abfrage
                 execute_sql_query(source_engine, text(query), raise_exceptions = True, commit = True)
-            except Exception:
-                message = 'Aufgrund eines Fehlers konnte die NOT-NULL-Constraint nicht hinzugefügt werden.'
+            # Treten hierbei Fehler auf, kann keine Constraint hinzugefügt werden.
+            except Exception as error:
+                message = f'Aufgrund eines Fehlers konnte die NOT-NULL-Constraint nicht hinzugefügt werden. {str(error)}'
+            # Anderenfalls wird die Ausgabenachricht zu einer Erfolgsmeldung.
             else:
                 message = 'Die NOT-NULL-Constraint konnte erfolgreich hinzugefügt werden.'
 
@@ -860,38 +1007,57 @@ def add_constraints_to_new_attribute(target_table_meta_data:TableMetaData, sourc
     else:
         raise DialectError(f'Der SQL-Dialekt {source_engine.dialect.name} wird nicht unterstützt.')
     constraint_result = convert_result_to_list_of_lists(execute_sql_query(source_engine, text(constraint_query)))
+    # Wenn das abgefragte Attribut mindestens eine CHECK-Constraint aufweist, werden diese nacheinander abgearbeitet.
     if len(constraint_result) > 0:
         success_counter = 0
         for row in constraint_result:
+            # Da der Name des Zielattributs von jenem des Quellattributes abweichen kann, werden die Vorkommen des Quellattributes im Ausdruck
+            # für die Constraint-Erstellung und in ihrer Bezeichnung durch den Namen des Zielattributes ersetzt.
             constraint_string = str(row[0]).replace(source_attribute_name, target_attribute_name)
             constraint_name = str(row[1]).replace(source_attribute_name, target_attribute_name)
+            # In MariaDB wird bei der Constraint-Abfrage nur der Inhalt der Klammern hinter CHECK ausgegeben, nicht der volle Ausdruck.
             if not constraint_string.lower().startswith('check'):
+                # Daher wird hier CHECK(...) hinzugefügt, um den Ausdruck zum Einfügen der Constraint in die Zieltabelle verwenden zu können.
                 constraint_string = f'CHECK ({constraint_string})'
+            ### Erstellen und Ausführen der Anweisung für das Hinzufügen der aktuellen CHECK-Constraint
             add_constraint_query = text(f'ALTER TABLE {target_table_name} ADD CONSTRAINT {constraint_name} {constraint_string}')
             try:
                 execute_sql_query(target_engine, add_constraint_query, raise_exceptions = True, commit = True)
+            # Fehlermeldungen werden der später ausgegebenen Nachricht angehängt.
             except Exception as error:
                 message = f'{message} Die Bedingung {constraint_string} konnte aufgrund eines Fehlers nicht hinzugefügt werden: {str(error)}.'
+            # Treten keine Fehler auf, wird der Erfolgszähler um eins erhöht.
             else:
                 success_counter += 1
+        # Entspricht der Wert des Zählers nach Abschluss der Schleife der Anzahl der CHECK-Constraints für das Attribut, wurden alle CHECK-Constraints
+        # hinzugefügt, sodass dies in der App angezeigt werden kann.
         if success_counter == len(constraint_result):
             message = f'{message} Alle {success_counter} CHECK-Constraints konnten erfolgreich hinzugefügt werden.'
+        # Anderenfalls wird angegeben, wie viele Constraints hinzugefügt wurden.
         elif success_counter != 0:
             message = f'{message} {success_counter} von {len(constraint_result)} CHECK-Constraints konnten erfolgreich hinzugefügt werden.'
+    # Wurden keine CHECK-Constraints für das Attribut gefunden ...
     else:
+        # ... und darf das Quellattribut NULL-Werte annehmen, bestehen keine Constraints des Quellattributs, die mit dieser Funktion hinzugefügt werden können.
         if data_type_info['is_nullable']:
-            message = f'Für das Attribut {source_attribute_name} bestehen in der Quelltabelle keine NOT-NULL- oder CHECK-Constraints.'
+            # Daher wird eine entsprechende Meldung ausgegeben.
+            return f'Für das Attribut {source_attribute_name} bestehen in der Quelltabelle keine NOT-NULL- oder CHECK-Constraints.'
+        # Darf das Attribut keine NULL-Werte annehmen, besteht hingegen eine NOT-NULL-Constraint, aber keine CHECK-Constraint.
         else:
-            message = f'Für das Attribut {source_attribute_name} bestehen in der Quelltabelle keine CHECK-Constraints.'
+            # Daher wird das Fehlen von CHECK-Constraints in der Meldung erwähnt.
+            message = f'{message} Für das Attribut {source_attribute_name} bestehen in der Quelltabelle keine CHECK-Constraints.'
     return message
 
 
 def get_full_column_definition_for_mariadb(table_meta_data:TableMetaData, attribute_name:str):
-    """Gibt den Ausdruck aus, mit dem das angegebene Attribut in MariaDB angelegt werden kann.
+    """Gibt den Ausdruck aus, der für das Anlegen des angegebenen Attributes in MariaDB benötigt wird.
     
-    table_meta_data: Objekt vom Typ TableMetaData mit der zugehörigen Engine (SQL-Dialekt MariaDB, sonst Ausgabe eines DialectErrors)
-    attribute_name: Attribut, dessen Ausdruck abgerufen werden soll; muss in der Attributliste von table_meta_data enthalten sein, sonst wird ein ArgumentError ausgegeben."""
+    table_meta_data: TableMetaData-Objekt mit der zugehörigen Engine (SQL-Dialekt MariaDB, sonst Ausgabe eines DialectErrors)
+
+    attribute_name: Attribut, dessen Ausdruck abgerufen werden soll; muss in der Attributliste von table_meta_data enthalten sein, sonst wird ein ArgumentError ausgegeben.
     
+    Ausgabe des Ausdrucks für SQL-Anweisung als String; None, wenn bei der Abfrage Fehler auftreten."""
+
     # Ausgabe eines ArgumentErrors, wenn das angegebene Attribut nicht in der Attributliste des TableMetaData-Objekts enthalten ist
     if attribute_name not in table_meta_data.columns:
         raise ArgumentError(None, 'Das zu betrachtende Attribut muss in der angegebenen Tabelle enthalten sein.')
@@ -925,6 +1091,23 @@ def get_full_column_definition_for_mariadb(table_meta_data:TableMetaData, attrib
 
 
 def check_arguments_for_joining(table_meta_data:list[TableMetaData], attributes_to_join_on:list[str], attributes_to_select_1:list[str], attributes_to_select_2:list[str], cast_direction:int = None):
+    """Überprüfung, ob die Argumente für die Join-Funktionen der erwarteten Form entsprechen.
+    
+    table_meta_data: Liste der TableMetaData-Objekte der beiden zu verbindenden Tabellen
+    
+    attributes_to_join_on: Liste der beiden Attributnamen, über die der Join erfolgen soll
+    
+    attributes_to_select_1: Liste der Attributnamen der ersten Tabelle, die ausgewählt werden sollen
+    
+    attributes_to_select_2: Liste der Attributnamen der zweiten Tabelle, die ausgewählt werden sollen
+    
+    cast_direction: Integer-Wert, der die Richtung der Typkonversion wiedergibt
+    
+    Keine Ausgabe, wenn alle Argumente die erwartete Form haben; Ausgabe eines TypeErrors, wenn die Elemente von table_meta_data nicht vom Typ
+    TableMetaData sind, Ausgabe eines DialectErrors bei nicht unterstützten SQL-Dialekten und Ausgabe eines ArgumentErrors, wenn nicht genau zwei
+    Join-Attribute, genau zwei TableMetaData-Objekte und min. ein auszuwählendes Attribut angegeben sind oder cast_direction einen anderen Wert als
+    None, 0, 1 oder 2 hat."""
+    
     if any([type(item) != TableMetaData for item in table_meta_data]):
         raise TypeError(None, 'Die Tabellenmetadaten müssen vom Typ TableMetaData sein.')
     engine_1 = table_meta_data[0].engine
@@ -944,29 +1127,68 @@ def check_arguments_for_joining(table_meta_data:list[TableMetaData], attributes_
     
 
 def list_attributes_to_select(attributes_to_select:list[str], dialect:str, table_name:str = None, db_name:str = None):
+    """Erstellt aus einer Liste von Attributnamen einen String, der die Attributnamen durch Kommas getrennt für die Abfrage aufbereitet enthält, 
+    ggf. mit doppelten Anführungszeichen umgeben.
+    
+    attributes_to_select: Liste der abzufragenden Attribute
+    
+    dialect: SQL-Dialekt der abzufragenden Tabelle (aktuell 'mariadb' oder 'postgresql')
+    
+    table_name: Name der Tabelle (optional), wenn dieser den Attributnamen vorangestellt werden soll
+    
+    db_name: Name der Datenbank (optional), wenn dieser den Tabellennamen vorangestellt werden soll
+
+    Ausgabe des zusammengefügten Strings; Ausgabe eines DialectErrors bei nicht unterstützten SQL-Dialekten."""
+
+    if dialect != 'mariadb' and dialect != 'postgresql':
+        raise DialectError(f'Der SQL-Dialekt {dialect} wird nicht unterstützt.')
     attribute_string = ''
     for index, attribute in enumerate(attributes_to_select):
+        # Erstellen einer Kopie des Attributnamens, damit diese ggf. mit Trennzeichen versehen werden kann
         query_attribute = attribute
+        # Wenn der Tabellenname mit aufgelistet werden soll ...
         if table_name != None:
-            if not table_name.startswith('"'):
+            # ... und noch nicht von Anführungszeichen umgeben ist, ...
+            if not table_name.startswith('"') and not table_name.endswith('"'):
+                # ... wird dieser ggf. mit Trennzeichen versehen.
                 table_name = convert_string_if_contains_capitals_or_spaces(table_name, dialect)
+            # Wenn der Datenbankname mit aufgelistet werden soll ...
             if db_name != None:
-                if not db_name.startswith('"'):
+                # ... und noch nicht von Anführungszeichen umgeben ist, ...
+                if not db_name.startswith('"') and not db_name.endswith('"'):
+                    # ... wird dieser ebenso ggf. mit Trennzeichen versehen ...
                     db_name = convert_string_if_contains_capitals_or_spaces(db_name, dialect)
+                # ... und dem Tabellennamen durch einen Punkt abgetrennt vorangestellt.
                 table_name = f'{db_name}.{table_name}'
-            if not query_attribute.startswith('"'):
+            # Analog wird die Kopie des Attributs ggf. mit Trennzeichen versehen.
+            if not query_attribute.startswith('"') and not not query_attribute.endswith('"'):
                 query_attribute = convert_string_if_contains_capitals_or_spaces(query_attribute, dialect)
+            # Anschließend werden alle Elemente zusammengefügt.
             query_attribute = f'{table_name}.{query_attribute}'
+        # Das erste aufzulistende Attribut wird übernommen.
         if index == 0:
             attribute_string = query_attribute
+        # Alle anderen Attribute werden dem bereits bestehenden Ausgabe-String durch ein Leerzeichen abgetrennt angehängt.
         else:
             attribute_string = f'{attribute_string} {query_attribute}'
+        # Wenn es sich nicht um das einzige oder das letzte Attribut der Liste handelt, ...
         if len(attributes_to_select) > 1 and attribute != attributes_to_select[len(attributes_to_select) - 1]:
+            # ... wird dem Ausgabe-String zur Abtrennung des nächsten Attributs ein Komma angehängt.
             attribute_string += ','
-        print(attribute_string)
     return attribute_string
 
 def check_basic_data_type_compatibility(table_meta_data_1:TableMetaData, table_meta_data_2:TableMetaData):
+    """Paarweise Überprüfung der Kompatibilität aller Attribute zweier Tabellen für die Anzeige auf den Seiten für Operationen auf zwei Tabellen.
+    
+    table_meta_data_1: TableMetaData-Objekt der ersten angezeigten Tabelle
+    
+    table_meta_data_2: TableMetaData-Objekt der zweiten angezeigten Tabelle
+
+    Ausgabe eines Dictionarys mit Zahlen zwischen 0 und 6 als Schlüssel und den diesen Kompatibilitätscodes zugeordneten Attributtupeln als Wert;
+    0 = fehlende Kompatibilität, 1 = volle Kompatibilität, 2 = ggf. uneindeutige Einträge min. eines der Attribute, 3 = ggf. nötige Typkonversionen,
+    4 = definitiv nötige Typkonversionen, 5 = ggf. nicht eindeutige Werte mit ggf. nötigen Typkonversionen und 6 = ggf. nicht eindeutige Werte mit 
+    nötigen Typkonversionen."""
+
     compatibility_by_code = {}
     for column_name_1 in table_meta_data_1.columns:
         for column_name_2 in table_meta_data_2.columns:
@@ -974,23 +1196,29 @@ def check_basic_data_type_compatibility(table_meta_data_1:TableMetaData, table_m
             full_dtype_info_2 = table_meta_data_2.data_type_info[column_name_2]
             dgroup_1 = table_meta_data_1.get_data_type_group(column_name_1)
             dgroup_2 = table_meta_data_2.get_data_type_group(column_name_2)
-            dtype_1 = table_meta_data_1.get_data_type(column_name_1).lower()
-            dtype_2 = table_meta_data_2.get_data_type(column_name_2).lower()
-            # Code für Kompatibilität. 0 bei fehlender Kompatibilität; 1 bei voller Kompatibilität; 2 bei ggf. uneindeutigen Einträgen des Attributs; 3, wenn ggf. Typkonversionen nötig sind; 4, wenn definitiv Typkonversionen notwendig sind. Durch Kombination können sich zudem die Werte 5 für ggf. nicht eindeutige Werte mit ggf. nötigen Typkonversionen und 6 für ggf. nicht eindeutige Werte mit nötigen Typkonversionen ergeben.
+            # Code für Kompatibilität, 0 = fehlende Kompatibilität.
             comp_code = 0
-            print(full_dtype_info_1, full_dtype_info_2)
+            # Volle Kompatibilität (Code 1) besteht, wenn die Datentypinformationen komplett übereinstimmen oder die Datentypgruppen übereinstimmen und
+            # beide Attribute eindeutige Werte aufweisen.
             if (full_dtype_info_1 == full_dtype_info_2) or (dgroup_1 == dgroup_2 and full_dtype_info_1['is_unique'] and full_dtype_info_2['is_unique']):
                 comp_code = 1
             else:
+                # Wenn min. eines der Attribute keine eindeutigen Werte enthält, ist eine eindeutige Zuordnung der Werte zueinander ggf. nicht möglich
+                # (Code 2).
                 if not full_dtype_info_1['is_unique'] or not full_dtype_info_2['is_unique']:
                     comp_code = 2
                 if dgroup_1 != dgroup_2:
+                    # Dezimalzahlen und ganze Zahlen erfordern untereinander ggf. Typkonversionen (Code 3 bzw. +3)
                     if dgroup_1 in ('integer', 'decimal') and dgroup_2 in ('integer', 'decimal'):
                         comp_code += 3
+                    # Alle anderen Kombinationen erfordern definitiv Typkonversionen (Code 4 bzw. +4)
                     elif dgroup_1 in ('integer', 'boolean', 'decimal', 'text', 'date') and dgroup_2 in ('integer', 'boolean', 'decimal', 'text', 'date'):
                         comp_code += 4
+            # Wenn das aktuell betrachtete Tupel von Attributen das erste mit diesem Kompatibilitätscode ist, wird der Code als neuer Schlüssel
+            # hinzugefügt und das Tupel in einer Liste als Wert angegeben.
             if comp_code not in compatibility_by_code.keys():
                 compatibility_by_code[comp_code] = [(column_name_1, column_name_2)]
+            # Anderenfalls wird das Attributtupel der bereits bestehenden Werteliste angehängt.
             else:
                 compatibility_by_code[comp_code].append((column_name_1, column_name_2))
 

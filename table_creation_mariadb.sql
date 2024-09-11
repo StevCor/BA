@@ -107,7 +107,7 @@ INSERT INTO Uebung_Datenbanken_SS2024 (Matrikelnummer, Punktzahl, zugelassen) VA
 	(3763593, 200, TRUE),
 	(5181568, 175, TRUE);
 	
-	
+-- Anlegen der Tabelle vorlesung_datenbanken_ss2023 (als Beispiel für eine bereits zusammengefügte Tabelle)	
 CREATE TABLE IF NOT EXISTS Vorlesung_Datenbanken_SS2023 (
   Matrikelnummer INT(11) NOT NULL CHECK (Matrikelnummer between 1000000 and 9999999),
   Vorname VARCHAR(32) NOT NULL,
@@ -116,7 +116,6 @@ CREATE TABLE IF NOT EXISTS Vorlesung_Datenbanken_SS2023 (
   Note VARCHAR(16) DEFAULT NULL,
   PRIMARY KEY (Matrikelnummer)
 );
-
 INSERT INTO Vorlesung_Datenbanken_SS2023 (Matrikelnummer, Vorname, Nachname, zugelassen, Note)
 VALUES (1432209, 'Hendrik', 'Nielsen', TRUE, '1.0'),
 (1503456, 'Jessica', 'Wolnitz', FALSE, NULL),
@@ -129,9 +128,3 @@ VALUES (1432209, 'Hendrik', 'Nielsen', TRUE, '1.0'),
 (2360099, 'Gustav', 'Grant', TRUE, 'n. b.'),
 (2398562, 'Karl', 'Heinz', TRUE, '2.7'),
 (2400563, 'Gudrun', 'Becker', FALSE, NULL);
-
-SELECT * FROM vorlesung_datenbanken_ss2024 WHERE Vorname LIKE '%Jo%' OR Nachname LIKE '%Jo%';
-SELECT COUNT(*) FROM vorlesung_datenbanken_ss2024 WHERE Vorname LIKE '%Jo%' OR Nachname LIKE '%Jo%';
-
-SELECT COLUMN_NAME, COLUMN_DEFAULT, IS_NULLABLE, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, DATETIME_PRECISION, COLUMN_KEY, COLUMN_TYPE, EXTRA FROM information_schema.columns WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'vorlesung_datenbanken_ss2023';
-

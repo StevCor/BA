@@ -1,3 +1,4 @@
+<!-- Anzeige der (Fehler-)Meldungen, die mit der Flask-Funktion flash() an die als Nächstes angezeigte Seite übermittelt werden -->
 {% with msg = get_flashed_messages() %}
 {% if msg %}
 {% for message in msg %}

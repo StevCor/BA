@@ -1,3 +1,4 @@
+// Funktion zur Anzeige der Grid.js-Tabellen, mit Anpassungen (v. a. Übersetzungen) übernommen von https://blog.miguelgrinberg.com/post/beautiful-interactive-tables-for-your-flask-templates
 function showTable(columnList, data, tableId) {
     new gridjs.Grid({
         columns: columnList,

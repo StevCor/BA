@@ -11,11 +11,13 @@ body {
     margin: 15px;
 }
 
+/* Darstellung der Elemente der Klasse links zwischen den Formularen nebeneinander */
 .links {
     display: flex;
     padding: 0 15px;
 }
 
+/* Darstellung der Hyper-Links */
 .links a {
     color: #adb2ba;
     text-decoration: none;
@@ -24,20 +26,26 @@ body {
     font-weight: bold;
 }
 
+/* Darstellung der Hyper-Links bei Mouse-over */
 .links a:hover {
     color: #006ab3;
 }
 
+/* Darstellung bereits angeklickter Hyper-Links */
 .links a.active {
     border-bottom: 3px solid #006ab3;
     color: #006ab3;
 }
 
+/* Darstellung der Formulare */
 form {
     justify-content: center;
     padding: 0 15px;
     padding-top: 20px;
 }
+
+/**** Darstellung der Formularelemente ****/
+
 
 form label {
     display: flex;
@@ -93,6 +101,7 @@ form select {
     margin-bottom: 20px;
 }
 
+/* Darstellung des Containers, der die Input-Elemente und ihre Label für die Datenbankoperationen enthält */
 .groups {
     display: inline-flex;
     margin: 0 auto;
@@ -100,31 +109,32 @@ form select {
     clear: both;
 }
 
+/* Darstellung der Label-Input-Gruppen innerhalb des group-Containers*/
 .item {
     display: inline-flex;
     float: left;
     padding: 12px;
 }
 
+/* Darstellung der einfachen HTML-Tabellen für die Vorschau (Vereinheitlichen, Suchen und Ersetzen */
 form table,
 form th,
 form td {
     border: 1px solid;
 }
 
+/* Zusammenführen der Umrandungen der Tabellenzellen, sodass nur jeweils eine Linie sichtbar ist */
 form table {
     justify-content: center;
     border-collapse: collapse;
 }
 
-form tr {
-    border-bottom: 1px solid #ddd;
-}
-
+/* Darstellung der (Fehler-)Meldungen */
 .msg {
     text-align: center;
 }
 
+/* Darstellung des Containers mit den Buttons und Labels für die Datenbank- und Toolverbindung */
 .connection {
     clear: both;
     float: right;
@@ -132,19 +142,19 @@ form tr {
     align-items: center;
 }
 
+/* Darstellung der oberen Navigationsleiste */
 .navtop {
     display: flex;
-    /*justify-content: space-between;*/
-    /* Aligns items in the flex container */
+    justify-content: space-between;
+    /* vertikale Zentrierung der Items */
     align-items: center;
-    /* Vertically centers the items */
     padding: 10px;
-    /* Optional: add padding for better spacing */
     height: 60px;
     width: 100%;
     border: 0;
 }
 
+/* gleichmäßige Verteilung der Navigationsleistenelemente */
 .navtop div {
     display: flex;
     justify-content: space-between;
@@ -153,6 +163,7 @@ form tr {
     height: 100%;
 }
 
+/* Darstellung der Überschrift und der Links in der Navigationsleiste */
 .navtop div h1,
 .navtop div a {
     display: inline-flex;
@@ -164,17 +175,14 @@ form tr {
     padding: 0 20px;
 }
 
+/* weitere Details für die Links */
 .navtop div a {
-    padding: 0 20px;
     text-decoration: none;
     color: #c1c4c8;
     font-weight: bold;
 }
 
-.navtop div a i {
-    padding: 2px 8px 0 0;
-}
-
+/* Darstellung der Links in der Navigationsleiste bei Mouse-over */
 .navtop div a:hover {
     color: #eaebed;
 }

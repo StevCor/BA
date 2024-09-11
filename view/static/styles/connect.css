@@ -12,7 +12,7 @@ body {
 }
 
 
-/*https://stackoverflow.com/questions/982054/how-to-center-an-element-in-the-middle-of-the-browser-window*/
+/*Zentrierung übernommen von https://stackoverflow.com/questions/982054/how-to-center-an-element-in-the-middle-of-the-browser-window*/
 .connect {
     width: 1100px;
     height: auto;
@@ -25,12 +25,13 @@ body {
 
 /* Überschriften der ersten Ebene */
 .connect h1 {
+    /* horizontal mittig platziert */
     text-align: center;
     color: #006ab3;
     font-size: 24px;
     padding: 20px 0 20px 0;
-    border-bottom: 1px solid #dee0e4;
     /* horizontale, ein Pixel breite Linie unter der Überschrift */
+    border-bottom: 1px solid #dee0e4;
 }
 
 /* Überschriften der zweiten Ebene */
@@ -52,24 +53,30 @@ body {
 
 /* Darstellung der Formulare */
 .db-forms form {
-    display: grid;
     /* Anordnung in einem Gitter */
+    display: grid;
     grid-template-columns: repeat(1, 1fr);
     float: left;
     padding: 30px;
 }
 
+/* Darstellung des Login-Formulars für die erste Datenbank */
 .db-forms form#first-db {
+    /* linksbündig */
     float: left;
+    /* Raum links vom Formular entfernen */
     clear: left;
 }
 
+/* Darstellung des Login-Formulars für die zweite Datenbank */
 .db-forms form#second-db {
+    /* rechtsbündig */
     float: right;
+    /* Raum rechts vom Formular entfernen */
     clear: right;
 }
 
-
+/* Darstellung der Label für die Eingabefelder direkt links neben Letzteren*/
 .db-forms form label {
     width: 100%;
     padding: 12px;
@@ -79,6 +86,7 @@ body {
     color: #ffffff;
 }
 
+/* Die Label nehmen 33 % der Zeilenbreite ein */
 .col-25 {
     float: left;
     width: 33%;
@@ -89,6 +97,7 @@ body {
     padding: 0.5em;
 }
 
+/* Die Input-Elemente nehmen 67 % der Zeilenbreite ein */
 .col-75 {
     float: right;
     width: 67%;
@@ -96,7 +105,7 @@ body {
 
 }
 
-/* Clear floats after the columns*/
+/* Entfernen von Elementen hinter den Zeilen */
 .row::after {
     content: "";
     display: table;
@@ -107,10 +116,17 @@ body {
     display: inline-block;
 }
 
+/* Darstellung der Buttons nebeneinander */
 .buttons {
     display: inline-block;
 }
 
+/* Graufärbung des Absende-Buttons, wenn das Formular deaktiviert ist */
+form input[type="submit"]:disabled {
+    background-color: lightgray;
+}
+
+/* Formatierung der Input-Elemente wie im Login- und Registrierungsformular */
 input[type=text],
 textarea {
     width: 100%;
@@ -141,8 +157,4 @@ textarea {
     font-weight: bold;
     color: #ffffff;
     transition: background-color 0.2s;
-}
-
-form input[type="submit"]:disabled {
-    background-color: lightgray;
 }

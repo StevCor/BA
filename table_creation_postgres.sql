@@ -1,12 +1,15 @@
+-- Anlegen der Datenbank PostgreTest1
 CREATE DATABASE "PostgresTest1" WITH ENCODING 'UTF8'; 
 
+---- Im Anschluss hieran muss zuerst eine Verbindung zu dieser Datenbank aufgebaut werden (z. B. über das Dropdown-Menü im Query-Tool von pgAdmin) -----
+
+-- Anlegen der Tabelle Vorlesung_Datenbanken_SS2024
 CREATE TABLE IF NOT EXISTS "Vorlesung_Datenbanken_SS2024" (
   "Matrikelnummer" INTEGER NOT NULL CHECK ("Matrikelnummer" between 1000000 and 9999999),
   "Vorname" VARCHAR(32) NOT NULL,
   "Nachname" VARCHAR(32) NOT NULL,
   PRIMARY KEY ("Matrikelnummer")
 );
-
 INSERT INTO "Vorlesung_Datenbanken_SS2024" ("Matrikelnummer", "Vorname", "Nachname") VALUES
 	(1869972, 'Kevin', 'Ganter'),
 	(1912967, 'Joanna', 'Hayes'),
@@ -102,7 +105,7 @@ INSERT INTO "Uebung_Datenbanken_SS2024" ("Matrikelnummer", "Punktzahl", zugelass
 	(3763593, 200, TRUE),
 	(5181568, 175, TRUE);
 	
-	
+-- Anlegen der Tabelle vorlesung_datenbanken_ss2023 (als Beispiel für eine bereits zusammengefügte Tabelle)		
 CREATE TABLE IF NOT EXISTS "Vorlesung_Datenbanken_SS2023" (
   "Matrikelnummer" INTEGER NOT NULL CHECK ("Matrikelnummer" between 1000000 and 9999999),
   "Vorname" VARCHAR(32) NOT NULL,
@@ -111,7 +114,6 @@ CREATE TABLE IF NOT EXISTS "Vorlesung_Datenbanken_SS2023" (
   "Note" VARCHAR(16) DEFAULT NULL,
   PRIMARY KEY ("Matrikelnummer")
 );
-
 INSERT INTO "Vorlesung_Datenbanken_SS2023" ("Matrikelnummer", "Vorname", "Nachname", zugelassen, "Note")
 VALUES (1432209, 'Hendrik', 'Nielsen', TRUE, '1.0'),
 (1503456, 'Jessica', 'Wolnitz', FALSE, NULL),

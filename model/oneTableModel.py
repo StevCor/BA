@@ -1,15 +1,24 @@
 
 from argparse import ArgumentError
-import re
 from sqlalchemy import bindparam, text
 from ControllerClasses import TableMetaData
 from model.SQLDatabaseError import DialectError, QueryError, UpdateError
 from model.databaseModel import build_sql_condition, convert_result_to_list_of_lists, convert_string_if_contains_capitals_or_spaces, execute_sql_query, get_full_table_ordered_by_primary_key
 
 
-### Funktionen für die Suche in einer Tabelle ###
+##### Funktionen für die Suche in einer Tabelle #####
 
 def search_string(table_meta_data:TableMetaData, string_to_search:str, columns_to_search:list[str]):
+    """Erstellen und Ausführen der Abfrage für die Suche nach einem String in einer Tabelle
+    
+    table_meta_data: TableMetaData-Objekt der zu durchsuchenden Tabelle
+     
+    string_to_search: zu suchende Zeichenkette
+    
+    columns_to_search: Liste mit den Attributnamen (als Strings), die durchsucht werden sollen
+
+    Ausgabe des Abfrageergebnisses als Liste von Listen; Ausgabe eines DialectErrors bei nicht unterstützten SQL-Dialekten."""
+
     # Beziehen der benötigten Variablen aus table_meta_data: Engine, Dialektname und Tabellenname
     engine = table_meta_data.engine
     dialect = engine.dialect.name
@@ -53,7 +62,7 @@ def search_string(table_meta_data:TableMetaData, string_to_search:str, columns_t
     return result
 
 
-### Funktionen für das Ersetzen von (Teil-)Strings ###
+##### Funktionen für das Ersetzen von (Teil-)Strings #####
 
 def get_replacement_information(table_meta_data:TableMetaData, affected_attributes_and_positions:list[tuple[str, int:0|1]], old_value:str, replacement:str):
     cols_and_dtypes = table_meta_data.data_type_info
@@ -61,8 +70,6 @@ def get_replacement_information(table_meta_data:TableMetaData, affected_attribut
         raise ArgumentError(None, 'Für alle Attribute der Tabelle muss angegeben sein, ob sie von der Änderung betroffen sein können oder nicht.')
     if any([x[1] != 0 and x[1] != 1 for x in affected_attributes_and_positions]):
         raise ArgumentError(None, 'Kann ein Attribut von der Änderung betroffen sein, muss dies durch den Wert 1 in der Liste gekennzeichnet sein. Anderenfalls sollte dort der Wert 0 stehen.')
-    engine = table_meta_data.engine
-    table_name = table_meta_data.table_name
     primary_keys = table_meta_data.primary_keys
     affected_attributes = []
     positions = []
@@ -131,8 +138,6 @@ def get_replacement_information(table_meta_data:TableMetaData, affected_attribut
             occurrence_dict[occurrence_counter] = {'row_no': row_no, 'primary_key': primary_key_value, 'affected_attribute': affected_attributes[0]}
     
     return row_nos_old_and_new_values, occurrence_dict
-
-
 
 # alle Vorkommen eines Teilstrings ersetzen
 def replace_all_string_occurrences(table_meta_data:TableMetaData, column_names:list, string_to_replace:str, replacement_string:str, commit:bool = False):
@@ -207,7 +212,7 @@ def get_indexes_of_affected_attributes_for_replacing(table_meta_data:TableMetaDa
     condition = f"{operator} {concatenated_string}"
     for index, key in enumerate(cols_and_dtypes.keys()):
         if affected_attributes == None or (affected_attributes != None and key in affected_attributes):
-            if table_meta_data.get_data_type_group(key) != 'text': #[1]
+            if table_meta_data.get_data_type_group(key) != 'text':
                 query = f'{query} CASE WHEN CAST({key} AS {cast_data_type}) {condition} {case_selected_attribute}'
             else:
                 query = f'{query} CASE WHEN {key} {condition} {case_selected_attribute}'
@@ -236,7 +241,6 @@ def replace_some_string_occurrences(table_meta_data:TableMetaData, occurrences_d
     success_counter = 0
     failed_updates = []
     for row in occurrences_dict.values():
-        print(row)
         query = f'UPDATE {table_name} SET'
         update_params = {}
         primary_key = row['primary_key']
@@ -263,7 +267,6 @@ def replace_some_string_occurrences(table_meta_data:TableMetaData, occurrences_d
             update_params[key] = primary_key[index]
         condition = build_sql_condition(tuple(primary_key_attributes), db_dialect, 'AND')
         query = text(f'{query} {condition}')
-        print(query)
         try:
             execute_sql_query(engine, query, update_params, raise_exceptions = True, commit = commit)
         except Exception:
@@ -464,9 +467,20 @@ def get_concatenated_string_for_matching(db_dialect:str, search_parameter_name:s
         return f"'%' || :{search_parameter_name} || '%'"
     
 def escape_string(db_dialect:str, string:str):
+    """Escaping von Zeichen, die in regulären Ausdrücken in SQL eine besondere Funktion haben
+    
+    db_dialect: SQL-Dialekt der Datenbank (aktuell 'mariadb' oder 'postgresql')
+    
+    string: zu bearbeitender String
+    
+    Gibt den String entweder unbearbeitet oder mit Anpassung zurück."""
+    
+    # Prozentzeichen, Unterstriche, einfache Anführungszeichen und doppelte Anführungszeichen werden in regulären Ausdrücken in MariaDB und 
+    # PostgreSQL jeweils durch Voranstellen eines Backslash als String (keine Zeichen mit besonderer Funktion) interpretiert.
+    # In PostgreSQL müssen Backslashes verdoppelt werden, ...
     if db_dialect == 'postgresql':
         string = string.replace('\\', '\\\\').replace('%', '\%').replace('_', '\_').replace("'", "\'").replace('"', '\"')
     elif db_dialect == 'mariadb':
+        # ... in MariaDB vervierfacht.
         string = string.replace('\\', '\\\\\\\\').replace('%', '\%').replace('_', '\_').replace("'", "\'").replace('"', '\"')
-    print(string)
     return string

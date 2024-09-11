@@ -11,6 +11,7 @@ body {
     margin: 0;
 }
 
+/* Darstellung der Box, in der die Elemente angezeigt werden */
 .login,
 .register {
     width: 400px;
@@ -19,7 +20,7 @@ body {
     margin: 100px auto;
 }
 
-/* Styling der obersten Überschriften */
+/* Darstellung der obersten Überschriften */
 h1 {
     text-align: center;
     color: #006ab3;
@@ -28,12 +29,13 @@ h1 {
     border-bottom: 1px solid #dee0e4;
 }
 
-
+/* Darstellung der Elemente der Klasse links zwischen den Formularen nebeneinander */
 .links {
     display: flex;
     padding: 0 15px;
 }
 
+/* Darstellung von Hyper-Links */
 .links a {
     color: #adb2ba;
     text-decoration: none;
@@ -42,21 +44,34 @@ h1 {
     font-weight: bold;
 }
 
+/* Darstellung der Hyper-Links bei Mouse-over */
 .links a:hover {
     color: #006ab3;
 }
 
+/* Darstellung bereits angeklickter Hyper-Links */
 .links a.active {
     border-bottom: 3px solid #006ab3;
     color: #006ab3;
 }
 
+/* Darstellung der Formulare */
 form {
+    /* Elemente nebeneinander */
     display: flex;
     flex-wrap: wrap;
+    /* horizontal mittig */
     justify-content: center;
     padding-top: 20px;
 }
+
+/* Darstellung der (Fehler-)Meldungen unter dem Formular */
+.msg {
+    /* zentriert */
+    text-align: center;
+}
+
+/**** Darstellung der Formularelemente ****/
 
 form label {
     display: flex;
@@ -101,9 +116,4 @@ form input[type="submit"] {
 form input[type="submit"]:hover {
     background-color: #006ab3;
     transition: background-color 0.2s;
-}
-
-
-.msg {
-    text-align: center;
 }
