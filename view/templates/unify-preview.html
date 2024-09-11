@@ -6,6 +6,15 @@
 {% block preview_content %}
 <h4>Vorschau der Änderungen des Attributs {{ column_to_unify }}</h4>
 <form action="{{ '/unify' }}" method="POST">
+    Bitte überprüfen Sie die aktualisierten Werte.
+    <div class="groups">
+        <div class="item">
+            <a href="{{ url_for('unify_db_entries') }}"><button>Abbrechen</button></a>
+        </div>
+        <div class="item">
+            <input type="submit" value="Änderungen durchführen">
+        </div>
+    </div>
     <div id="table">
         <table id="preview">
             <thead>
@@ -39,11 +48,9 @@
             </tbody>
         </table>
     </div>
-
+    {{ affected_rows | length }} von {{ row_total }} Einträgen werden verändert.
     <input type="hidden" id="column-to-unify" name="column-to-unify" value="{{ column_to_unify }}">
     <input type="hidden" id="old-values" name="old-values" value="{{ old_values }}">
     <input type="hidden" id="new-value" name="new-value" value="{{ new_value }}">
-    {{ affected_rows | length }} von {{ row_total }} Einträgen werden verändert.
-    <input type="submit" value="Änderungen durchführen">
 </form>
 {% endblock preview_content %}

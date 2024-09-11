@@ -7,7 +7,7 @@ from model.databaseModel import get_data_type_meta_data, get_full_table_ordered_
 from model.oneTableModel import check_data_type_and_constraint_compatibility
 
 
-def show_both_tables_separately(first_table_meta_data:TableMetaData, second_table_meta_data:TableMetaData, comp_by_code:dict, mode:str):
+def show_both_tables_separately(first_table_meta_data:TableMetaData, second_table_meta_data:TableMetaData, comp_by_code:dict, mode:str, user_name:str):
     """Bezieht die Informationen zweier Datenbanktabellen, die für ihre Anzeige in two-tables.html benötigt werden, und ruft Letztere auf.
     
     first_table_meta_data: TableMetaData-Objekt für die zuerst anzuzeigende Tabelle
@@ -17,7 +17,9 @@ def show_both_tables_separately(first_table_meta_data:TableMetaData, second_tabl
     comp_by_code: Dictionary mit Schlüsseln der Werte 0 (keine Kompatibilität), 1 (vollständige Kompatibilität), 2 (uneindeutig), 
     5 (uneindeutig und ggf. Typkonversion nötig) und/oder 6 (uneindeutig und definitiv Typkonversion nötig)  
 
-    mode: 'compare' oder 'merge', da für die Optionen unterschiedliche Variablen für die Anzeige benötigt werden."""
+    mode: 'compare' oder 'merge', da für die Optionen unterschiedliche Variablen für die Anzeige benötigt werden
+    
+    user_name: Name des aktuell angemeldeten Nutzers."""
 
     ### Anlegen der Variablen für leichteren Zugriff mit abgekürzten Namen ###
     db_name_1 = first_table_meta_data.engine.url.database
@@ -43,11 +45,11 @@ def show_both_tables_separately(first_table_meta_data:TableMetaData, second_tabl
         # ... wird die Information benötigt, welche der Attribute in beiden Tabellen keine Primärschlüssel sind, da nur diese als Zielattribut ausgewählt werden können
         no_pk_columns_1 = [x for x in table_columns_1 if x not in first_table_meta_data.primary_keys]
         no_pk_columns_2 = [x for x in table_columns_2 if x not in second_table_meta_data.primary_keys]
-        return render_template('two-tables.html', db_name_1 = db_name_1, db_dialects = db_dialects, table_name_1 = table_1, db_name_2 = db_name_2, table_name_2 = table_2, 
+        return render_template('two-tables.html', user_name = user_name, db_name_1 = db_name_1, db_dialects = db_dialects, table_name_1 = table_1, db_name_2 = db_name_2, table_name_2 = table_2, 
                                table_columns_1 = table_columns_1, data_1 = data_1, table_columns_2 = table_columns_2, data_2 = data_2, comp_by_code = comp_by_code, no_pk_columns_1 = no_pk_columns_1, no_pk_columns_2 = no_pk_columns_2, mode = mode)
     # Für den Vergleich werden lediglich die oben gewonnenen Daten übergeben.
     elif mode == 'compare':
-        return render_template('two-tables.html', db_name_1 = db_name_1, db_dialects = db_dialects, table_name_1 = table_1, db_name_2 = db_name_2, table_name_2 = table_2, 
+        return render_template('two-tables.html', user_name = user_name, db_name_1 = db_name_1, db_dialects = db_dialects, table_name_1 = table_1, db_name_2 = db_name_2, table_name_2 = table_2, 
                                table_columns_1 = table_columns_1, data_1 = data_1, table_columns_2 = table_columns_2, data_2 = data_2, comp_by_code = comp_by_code, mode = mode)
     
 

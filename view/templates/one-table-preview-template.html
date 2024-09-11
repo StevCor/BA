@@ -6,19 +6,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>SQL-Datenbanken{% block title %}
         {% endblock title %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles/one-table.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
 
 </head>
 
 <body>
-    <input type="hidden" id="database-name" value="{{ db_name }}">
-
-    <div class="connection">
-        <h3>Verbunden mit Datenbank {{ db_name }}, Tabelle {{ table_name }} </h3>
-        <a href="{{ url_for('disconnect_from_db', engine_no = 1) }}"><button id="disconnect">Verbindung
-                trennen </button></a>
-    </div>
-
+    <nav class="navtop">
+        <div>
+            <h1>Willkommen, {{user_name}}!</h1>
+            <div class="connection">
+                <h3>Verbunden mit Datenbank {{ db_name }}, Tabelle {{ table_name }} </h3>
+                <a href="{{ url_for('disconnect_from_db', engine_no = 1) }}"><button id="disconnect">Datenbankverbindung
+                        trennen </button></a>
+                <a href="{{ url_for('logout') }}"><button>Logout</button></a>
+            </div>
+        </div>
+    </nav>
     <div class="links">
         <button id="back">Zurück</button>
         <a href="{{ url_for('search_entries') }}" {% block search_active %} {% endblock search_active %}>Suchen</a>

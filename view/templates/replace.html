@@ -1,29 +1,43 @@
 {% extends "one-table-template.html" %}
+
 {% block title %}: Suchen und Ersetzen
 {% endblock title %}
+
 {% block replace_active %} class="active" {% endblock %}
+
 {% block one_table_form %}
 <form id="replace-params" action="{{ '/replace-preview' }}" method="POST">
-    <h4>Bitte wählen geben Sie an, in welchen Spalten die Ersetzung vorgenommen werden soll.</h4>
-    Kommt der gesuchte String mehrfach in einem Eintrag vor, werden alle Vorkommen ersetzt. Bei Eingabe eines
-    leeren Strings wird der gesuchte String gelöscht.<br>
-    <label for="column-to-search">Spalte auswählen:</label>
-    <select name="column-to-search" id="column-to-search" required>
-        <option value="all">Alle Spalten</option>
-        {% for column in table_columns %}
-        <option value="{{ column }}">{{ column }}</option>
-        {% endfor %}
-    </select>
-    <label for="search-string">Suchen:</label>
-    <input type="text" id="searchstring" name="searchstring" minlength="2">
-    <label for="replacement">Ersetzen durch:</label>
-    <input type="text" id="replacement" name="replacement">
-    <input type="hidden" id="engine-no" name="engine-no" value="{{ engine_no }}">
-    <input type="hidden" id="table-name" name="table-name" value="{{ table_name }}">
-    <input type="submit" id="preview" value="Vorschau">
+    Bitte wählen geben Sie an, in welchen Spalten die Ersetzung vorgenommen werden soll. Kommt der gesuchte String
+    mehrfach in einem Eintrag vor, werden alle Vorkommen ersetzt. Bei Eingabe eines
+    leeren Strings wird der gesuchte String gelöscht.
+    <div class="groups">
+        <div class="item">
+            <label for="column-to-search">Spalte auswählen:</label>
+            <select name="column-to-search" id="column-to-search" required>
+                <option value="all">Alle Spalten</option>
+                {% for column in table_columns %}
+                <option value="{{ column }}">{{ column }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="item">
+            <label for="search-string">Suchen:</label>
+            <input type="text" id="searchstring" name="searchstring" minlength="2">
+        </div>
+        <div class="item">
+            <label for="replacement">Ersetzen durch:</label>
+            <input type="text" id="replacement" name="replacement">
+        </div>
+        <input type="hidden" id="engine-no" name="engine-no" value="{{ engine_no }}">
+        <input type="hidden" id="table-name" name="table-name" value="{{ table_name }}">
+        <div class="item">
+            <input type="submit" id="preview" value="Vorschau">
+        </div>
+    </div>
 
 </form>
 {% endblock one_table_form %}
+
 {% block more_js %}
 <script>
     function showWarnings() {

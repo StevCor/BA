@@ -1,12 +1,11 @@
-
 import sys
-from pytest import CaptureFixture
 import pytest
 from sqlalchemy import Engine, create_engine, text
 from ControllerClasses import TableMetaData
 from model.databaseModel import get_data_type_meta_data, get_primary_key_from_engine, get_row_count_from_engine
 from model.oneTableModel import escape_string, get_concatenated_string_for_matching, get_replacement_information, search_string, set_matching_operator_and_cast_data_type
 import urllib.parse
+# Anpassung der PATH-Variable, damit die Umgebungsvariablen aus environmentVariables.py eingelesen werden können
 sys.path.append('tests')
 import environmentVariables as ev
 

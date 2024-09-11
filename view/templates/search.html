@@ -1,26 +1,37 @@
 {% extends "one-table-template.html" %}
+
 {% block title %}
 : Suche
 {% endblock title %}
+
 {% block search_active %} class="active" {% endblock search_active %}
+
 {% block one_table_form %}
 <form action="{{ '/search' }}" method="POST">
-    <div class=searchbar>
-        <label for="column-to-search">Spalte auswählen:</label>
-        <select name="column-to-search" id="column-to-search" required>
-            <option value="all">Alle Spalten</option>
-            {% for column in table_columns %}
-            {% if column == searched_column %}
-            <option value="{{ column }}" selected>{{ column }}</option>
-            {% else %}
-            <option value="{{ column }}">{{ column }}</option>
-            {% endif %}
-            {% endfor %}
-        </select>
-        <label for="search-string">Suchen:</label>
-        <input type="text" id="search-string" name="search-string" value="{{ searched_string }}">
+    Bitte wählen Sie die zu durchsuchende Spalte aus und geben den gewünschten Suchbegriff an. Ist Letzterer leer, wird
+    die volle Tabelle angezeigt.
+    <div class="groups">
+        <div class="item">
+            <label for="column-to-search">Spalte auswählen:</label>
+            <select name="column-to-search" id="column-to-search" required>
+                <option value="all">Alle Spalten</option>
+                {% for column in table_columns %}
+                {% if column == searched_column %}
+                <option value="{{ column }}" selected>{{ column }}</option>
+                {% else %}
+                <option value="{{ column }}">{{ column }}</option>
+                {% endif %}
+                {% endfor %}
+            </select>
+        </div>
+        <div class="item">
+            <label for="search-string">Suchen:</label>
+            <input type="text" id="search-string" name="search-string" value="{{ searched_string }}">
+        </div>
+
+        <div class="item">
+            <input type="submit" value="Suchen">
+        </div>
     </div>
-    <input type="hidden" id="table-name" name="table-name" value="{{ table_name }}">
-    <input type="submit" value="Suchen">
 </form>
 {% endblock one_table_form %}

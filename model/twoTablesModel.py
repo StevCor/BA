@@ -406,9 +406,9 @@ def join_tables_of_different_dialects_dbs_or_servers(table_meta_data:list[TableM
 
 def force_cast_and_match(data_type_group_1:str, data_type_group_2:str, values_to_match:list, cast_direction:int):
     if cast_direction not in (1, 2):
-        raise ArgumentError('Der Parameter cast_direction darf nur die Werte 1 oder 2 annehmen.')
+        raise ArgumentError(None, 'Der Parameter cast_direction darf nur die Werte 1 oder 2 annehmen.')
     elif data_type_group_1 not in ['boolean', 'integer', 'decimal', 'text', 'date'] or data_type_group_2 not in ['boolean', 'integer', 'decimal', 'text', 'date']:
-        raise ArgumentError('Mit dieser Funktion können nur Werte überprüft werden, die den Datentypgruppen boolean, integer, decimal, text oder date angehören.')
+        raise ArgumentError(None, 'Mit dieser Funktion können nur Werte überprüft werden, die den Datentypgruppen boolean, integer, decimal, text oder date angehören.')
     value_1 = values_to_match[0]
     value_2 = values_to_match[1]
     if cast_direction == 1:
@@ -786,20 +786,18 @@ def build_query_to_add_column(table_meta_data:TableMetaData, attribute_name:str,
             data_type = f'{data_type}({datetime_precision})'
             # ... bzw. bei Fehlen ausgelassen, sodass der Wert von der Datenbank automatisch gewählt wird.
     ### Zufügen von Unique-Constraints und Standardwerten ###
-    # Für Serial-Datentypen sind Unique-Constraints und Standardwerte implizit durch den Datentyp festgelegt, daher können sie hier ausgelassen werden.
-    if 'serial' not in data_type:
-        # Für Unique-Constraints ...
-        if target_column_data_type_info['is_unique']:
-            # ... wird dem Datentyp das Schlüsselwort UNIQUE angehängt.
-            data_type = f'{data_type} UNIQUE'
-        # Auch der Standardwert kann hier festgelegt werden.
-        default = target_column_data_type_info['column_default']
-        # Wenn nichts angegeben ist, wird dieser automatisch auf 'NULL' gesetzt.
-        # Da der Standardwert ein komplexer Ausdruck sein kann, der sich ggf. auch auf Attribute oder Tabellen bezieht, die nicht übertragen 
-        # werden, wird der Standardwert in dieser ersten Version nur übernommen, wenn es sich hierbei um eine Zahl oder das SQL-Kürzel für den
-        # aktuellen Zeitstempel handelt.
-        if default is not None and (type(default) == int or type(default) == float or 'current_timestamp' in str(default).lower()):
-            data_type = f'{data_type} DEFAULT {default}'
+    # Für Unique-Constraints ...
+    if 'is_unique' in target_column_data_type_info.keys() and target_column_data_type_info['is_unique']:
+        # ... wird dem Datentyp das Schlüsselwort UNIQUE angehängt.
+        data_type = f'{data_type} UNIQUE'
+    # Auch der Standardwert kann hier festgelegt werden.
+    default = target_column_data_type_info['column_default']
+    # Wenn nichts angegeben ist, wird dieser automatisch auf 'NULL' gesetzt.
+    # Da der Standardwert ein komplexer Ausdruck sein kann, der sich ggf. auch auf Attribute oder Tabellen bezieht, die nicht übertragen 
+    # werden, wird der Standardwert in dieser ersten Version nur übernommen, wenn es sich hierbei um eine Zahl oder das SQL-Kürzel für den
+    # aktuellen Zeitstempel handelt.
+    if default is not None and (type(default) == int or type(default) == float or 'current_timestamp' in str(default).lower()):
+        data_type = f'{data_type} DEFAULT {default}'
 
     # Ausgabe der zusammengefügten Anweisung zum Erstellen des neuen Attributs. Das Semikolon wird hier hinzugefügt, damit diese Anweisung der Update-Anweisung unmittelbar vorangestellt werden kann.
     return f'ALTER TABLE {table_name} ADD COLUMN {attribute_name} {data_type};'
@@ -821,8 +819,8 @@ def add_constraints_to_new_attribute(target_table_meta_data:TableMetaData, sourc
     source_engine = source_table_meta_data.engine
     target_engine = target_table_meta_data.engine
     source_table_name = source_table_meta_data.table_name
-    target_table_name = convert_string_if_contains_capitals_or_spaces(target_table_meta_data.table_name, source_engine.dialect.name)
-    escaped_target_attribute = convert_string_if_contains_capitals_or_spaces(target_attribute_name, source_engine.dialect.name)
+    target_table_name = convert_string_if_contains_capitals_or_spaces(target_table_meta_data.table_name, target_engine.dialect.name)
+    escaped_target_attribute = convert_string_if_contains_capitals_or_spaces(target_attribute_name, target_engine.dialect.name)
     data_type_info = source_table_meta_data.data_type_info[source_attribute_name]
     message = ''
     ### Hinzufügen der NOT-NULL-Constraint, falls das ursprüngliche Attribut eine solche aufweist ###
@@ -967,85 +965,6 @@ def list_attributes_to_select(attributes_to_select:list[str], dialect:str, table
             attribute_string += ','
         print(attribute_string)
     return attribute_string
-
-def get_data_type_meta_data(engines:list[Engine], table_names:list[str]):
-    if not 0 < len(engines) <= 2 or len(table_names) != 2:
-        raise ArgumentError('Es können nur eine Engine mit zwei Tabellen oder zwei Engines mit jeweils einer Tabelle überprüft werden.')
-    result_dict = {}
-    result_dict['table_1'] = {}
-    result_dict['table_2'] = {}
-    for index, engine in enumerate(engines):
-        query = 'SELECT TABLE_NAME, COLUMN_NAME, IS_NULLABLE, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, DATETIME_PRECISION'
-        if engine.dialect.name == 'mariadb':
-            query = f'{query}, COLUMN_KEY, COLUMN_TYPE FROM information_schema.columns WHERE TABLE_SCHEMA = DATABASE()'
-        elif engine.dialect.name == 'postgresql':
-            query = f"{query} FROM information_schema.columns WHERE TABLE_CATALOG = '{engine.url.database}'"
-        else:
-            raise QueryError('Dieser SQL-Dialekt wird nicht unterstüzt.')
-        if len(engines) == 1:
-            query = f"{query} AND (TABLE_NAME = '{table_names[0]}' OR TABLE_NAME = '{table_names[1]}')"
-        else:
-            query = f"{query} AND TABLE_NAME = '{table_names[index]}'"
-        result = convert_result_to_list_of_lists(execute_sql_query(engines[index], text(query)))
-        print(query)
-        # für PostgreSQL fehlt noch die Angabe, ob es sich um einen Primärschlüssel oder ein Attribut mit Unique-Constraint handelt
-        if engine.dialect.name == 'postgresql':
-            constraint_query = f"SELECT i.table_name, a.attname FROM pg_constraint con JOIN pg_attribute a ON a.attnum = ANY(con.conkey) JOIN information_schema.columns i ON a.attname = i.column_name AND"
-            if len(engines) == 1:
-                table_name_1 = convert_string_if_contains_capitals_or_spaces(table_names[0], engine.dialect.name)
-                table_name_2 = convert_string_if_contains_capitals_or_spaces(table_names[1], engine.dialect.name)
-                constraint_query = f"{constraint_query} (i.table_name = '{table_name_1}' OR i.table_name = '{table_name_2}') WHERE (con.conrelid = ('{table_name_1}'::regclass) OR con.conrelid = ('{table_name_2}'::regclass)) AND con.conrelid = a.attrelid AND (con.contype = 'p' OR con.contype = 'u') AND i.table_catalog = '{engine.url.database}'"
-            else:
-                table_name = convert_string_if_contains_capitals_or_spaces(table_names[index], engine.dialect.name)
-                constraint_query = f"{constraint_query} i.table_name = '{table_name}' WHERE con.conrelid = ('{table_name}'::regclass) AND con.conrelid = a.attrelid AND (con.contype = 'p' OR con.contype = 'u') AND i.table_catalog = '{engine.url.database}'"
-            constraint_result = execute_sql_query(engine, text(constraint_query))
-            unique_list = []
-            for entry in constraint_result:
-                if [entry[0], entry[1]] not in unique_list:
-                    unique_list.append([entry[0], entry[1]])
-        for row in result:
-            table_name = row[0]
-            if table_name == table_names[0]:
-                table_key = 'table_1'
-            else:
-                table_key = 'table_2'
-            column_name = row[1]
-            if row[2] == 'YES':
-                is_nullable = True
-            else:
-                is_nullable = False                
-            data_type = row[3]
-            character_max_length = row[4]
-            numeric_precision = row[5]
-            numeric_scale = row[6]
-            datetime_precision = row[7]
-            if (engine.dialect.name == 'mariadb' and (row[8] == 'PRI' or row[8] == 'UNI')) or (engine.dialect.name == 'postgresql' and [table_name, column_name] in unique_list):
-                is_unique = True
-            else:
-                is_unique = False  
-            if (engine.dialect.name == 'mariadb' and 'unsigned' in row[9].lower()) or (engine.dialect.name == 'postgresql' and (data_type == 'boolean' or 'serial' in data_type)):
-                is_unsigned = True
-            else:
-                is_unsigned = None
-            result_dict[table_key][column_name] = {}
-            if datetime_precision != None:
-                result_dict[table_key][column_name] = {'data_type_group': 'date', 'data_type': data_type, 'datetime_precision': datetime_precision}
-            elif character_max_length != None:
-                result_dict[table_key][column_name] = {'data_type_group': 'text', 'data_type': data_type, 'character_max_length': character_max_length}
-            elif numeric_precision != None:
-                if (engine.dialect.name == 'mariadb' and row[9].lower() == 'tinyint(1)') or (engine.dialect.name == 'postgresql' and data_type == 'boolean'):
-                    result_dict[table_key][column_name] = {'data_type_group': 'boolean', 'data_type': 'boolean'}
-                elif 'int' in data_type or numeric_scale == 0:
-                    result_dict[table_key][column_name] = {'data_type_group': 'integer', 'data_type': data_type, 'numeric_precision': numeric_precision}
-                else:
-                    result_dict[table_key][column_name] = {'data_type_group': 'decimal', 'data_type': data_type, 'numeric_precision': numeric_precision, 'numeric_scale': numeric_scale}
-            else: 
-                result_dict[table_key][column_name] = {'data_type_group': data_type, 'data_type': data_type}
-            if is_unsigned != None:
-                result_dict[table_key][column_name]['unsigned'] = is_unsigned
-            result_dict[table_key][column_name]['is_nullable'] = is_nullable
-            result_dict[table_key][column_name]['is_unique'] = is_unique
-    return result_dict
 
 def check_basic_data_type_compatibility(table_meta_data_1:TableMetaData, table_meta_data_2:TableMetaData):
     compatibility_by_code = {}

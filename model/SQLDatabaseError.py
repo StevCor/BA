@@ -1,3 +1,5 @@
+# Klasse mit für die App spezifischen Exceptions für Datenbankoperationen
+
 class DatabaseError(Exception):
     """Exception für falsche Login-Eingaben für die Datenbank."""
     def __init__(self, message:str):

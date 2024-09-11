@@ -184,7 +184,7 @@ def get_primary_key_from_engine(engine:Engine, table_name:str):
 # setzt String in doppelte Anführungszeichen, wenn darin Leerzeichen oder Großbuchstaben enthalten sind (Letzteres ist ausschließlich für 
 # Tabellen- und Spaltennamen in PostgreSQL nötig)
 def convert_string_if_contains_capitals_or_spaces(string:str, db_dialect:str):
-    if not string.startswith('"') and (db_dialect == 'postgresql' and any([x.isupper() for x in string])) or any([x == ' ' for x in string]):
+    if (not string.startswith('"') and not string.endswith('"')) and (db_dialect == 'postgresql' and any([x.isupper() for x in string])) or any([x == ' ' for x in string]):
         string = f'"{string}"'
     return string
 

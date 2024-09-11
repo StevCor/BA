@@ -7,19 +7,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
     <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
-    <!--<link rel="stylesheet" href="{{ url_for('static', filename='styles/two-tables.css') }}">-->
 </head>
 
 <body>
     <div class="two-tables">
-        <div class="connection">
-            <h3>Verbunden mit Datenbank {{ db_name_1 }} ({{ db_dialects[0] }}), Tabelle {{ table_name_1 }} und Datenbank
-                {{
-                db_name_2 }} ({{ db_dialects[1]}}), Tabelle {{ table_name_2 }}</h3>
-            <a href="{{ url_for('disconnect_from_single_db', engine_no = 3) }}"><button
-                    id="disconnect">Datenbankverbindungen
-                    trennen </button></a>
-        </div>
+        <nav class="navtop">
+            <div>
+                <h1>Willkommen, {{user_name}}!</h1>
+                <div class="connection">
+                    <h3>Verbunden mit Datenbank {{ db_name_1 }} ({{ db_dialects[0] }}), Tabelle {{ table_name_1 }} und
+                        Datenbank
+                        {{
+                        db_name_2 }} ({{ db_dialects[1]}}), Tabelle {{ table_name_2 }}</h3>
+                    <a href="{{ url_for('disconnect_from_db', engine_no = 3) }}"><button
+                            id="disconnect">Datenbankverbindungen
+                            trennen</button></a>
+                </div>
+                <a href="{{ url_for('logout') }}"><button>Logout</button></a>
+            </div>
+        </nav>
         <div class="links">
             <button id="back">Zurück</button>
             <div class="tab">

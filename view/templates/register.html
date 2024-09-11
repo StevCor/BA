@@ -6,6 +6,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/login-register.css') }}">
+    <!-- CSS-Datei für die Darstellung der Benutzernamen- und Passwort-Icons -->
     <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.1/css/all.css">
 </head>
 
@@ -31,6 +32,7 @@
             <input type="password" name="password" placeholder="Passwort" id="password"
                 pattern="^(?=\P{Ll}*\p{Ll})(?=\P{Lu}*\p{Lu})(?=\P{N}*\p{N})(?=[\p{L}\p{N}]*[^\p{L}\p{N}])[\s\S]{8,}$"
                 required>
+            <!--Darstellung von ggf. mit flash() angezeigten Meldungen-->
             {% include "message.html" %}
             <input type="submit" value="Registrieren">
         </form>

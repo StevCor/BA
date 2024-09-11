@@ -1,12 +1,24 @@
 {% extends "one-table-preview-template.html"%}
+
 {% block title %}
 : Auswahl für Vereinheitlichen
 {% endblock title %}
+
 {% block unify_active %} class="active" {% endblock unify_active %}
+
 {% block preview_content %}
 <h4>Alle Werte des Attributs {{ column_to_unify }}</h4>
 Bitte wählen Sie die Werte aus, die ersetzt werden sollen.
 <form action="{{ '/unify-preview' }}" method="POST">
+    <div class="groups">
+        <div class="item">
+            <label for="replacement">Ausgewählte Werte ersetzen durch:</label>
+            <input type="text" id="replacement" name="replacement">
+        </div>
+        <div class="item">
+            <input type="submit" id="preview" value="Vorschau">
+        </div>
+    </div>
     <div id="table">
         <table id="selection">
             <thead>
@@ -40,11 +52,10 @@ Bitte wählen Sie die Werte aus, die ersetzt werden sollen.
 
     <input type="hidden" id="column-to-unify" name="column-to-unify" value="{{ column_to_unify }}">
     <input type="hidden" id="table-name" name="table-name" value="{{ table_name }}">
-    <label for="replacement">Ausgewählte Werte ersetzen durch:</label>
-    <input type="text" id="replacement" name="replacement">
-    <input type="submit" id="preview" value="Vorschau">
+
 </form>
 {% endblock preview_content %}
+
 {% block more_js %}
 
 <script src="{{url_for('static', filename='isEmpty.js')}}"></script>

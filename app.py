@@ -8,7 +8,7 @@ from model.SQLDatabaseError import DatabaseError, DialectError
 from model.loginModel import register_new_user, login_user 
 from model.databaseModel import get_data_type_meta_data, connect_to_db, convert_result_to_list_of_lists, get_primary_key_from_engine, get_row_count_from_engine, list_all_tables_in_db_with_preview, get_full_table_ordered_by_primary_key
 from model.oneTableModel import get_replacement_information, get_row_number_of_affected_entries, get_unique_values_for_attribute, replace_all_string_occurrences, replace_some_string_occurrences, search_string, update_to_unify_entries
-from model.twoTablesModel import check_basic_data_type_compatibility, execute_merge_and_add_constraints, get_full_column_definition_for_mariadb, join_tables_of_different_dialects_dbs_or_servers, join_tables_of_same_dialect_on_same_server, simulate_merge_and_build_query
+from model.twoTablesModel import add_constraints_to_new_attribute, check_basic_data_type_compatibility, execute_merge_and_add_constraints, get_full_column_definition_for_mariadb, join_tables_of_different_dialects_dbs_or_servers, join_tables_of_same_dialect_on_same_server, simulate_merge_and_build_query
 
 # globale Variablen für den Datenbankzugriff
 global engine_1
@@ -47,6 +47,7 @@ app = Flask(__name__, template_folder = 'view/templates', static_folder = 'view/
 
 @app.route('/')
 def start(): 
+    flash('Bitte loggen Sie sich ein, um das Tool zu nutzen.')
     return redirect(url_for('check_login'))
     
 
@@ -54,7 +55,6 @@ def start():
 def check_login():
     if session.get('logged_in'):
         return redirect(url_for('show_db_login_page', engine_no = 1))
-    message = 'Bitte loggen Sie sich ein, um das Tool zu nutzen.'
     if request.method == 'POST':
         result = login_user(request.form['username'], request.form['password'])
         if result[0] == True:
@@ -67,11 +67,11 @@ def check_login():
     
 @app.route('/register', methods = ['POST', 'GET'])
 def register():
-    message = ''
     print(request)
     if request.method == 'POST':
         message = register_new_user(request.form['username'], request.form['password'])
-    return render_template('register.html', message = message)
+        flash(message)
+    return render_template('register.html')
 
 @app.route('/connect-to-db<int:engine_no>', methods = ['GET', 'POST'])
 def show_db_login_page(engine_no):
@@ -89,7 +89,7 @@ def show_db_login_page(engine_no):
                 message = f'Tabelle {meta_data_table_1.table_name} der Datenbank {engine_1.url.database} ({sql_dialect}) ausgewählt.'
             else:
                 message = ''
-            return render_template('db-connect.html', username = session['username'], engine_no = engine_no, engine_1 = engine_1, message = message)
+            return render_template('db-connect.html', user_name = session['username'], engine_no = engine_no, engine_1 = engine_1, message = message)
         
 @app.route('/connect-to-db', methods = ['GET', 'POST'])
 def set_up_db_connection():
@@ -99,7 +99,7 @@ def set_up_db_connection():
         if 'db-one' in request.form.keys():
             db_name = request.form['db-name1']
             db_dialect = request.form['db-dialect1']
-            username = request.form['user-name1']
+            db_user_name = request.form['user-name1']
             password = request.form['password1']
             host = request.form['host-name1']
             port = request.form['port-number1']
@@ -107,7 +107,7 @@ def set_up_db_connection():
         elif 'db-two' in request.form.keys():
             db_name = request.form['db-name2']
             db_dialect = request.form['db-dialect2']
-            username = request.form['user-name2']
+            db_user_name = request.form['user-name2']
             password = request.form['password2']
             host = request.form['host-name2']
             port = request.form['port-number2']
@@ -120,29 +120,30 @@ def set_up_db_connection():
             flash('Sie haben sich bereits mit zwei Datenbanken verbunden.')
             return redirect(url_for('compare_two_tables'))
         else:
+            user_name = session['username']
             try: 
-                db_engine = connect_to_db(username, password, host, port, db_name, db_dialect, db_encoding)
+                db_engine = connect_to_db(db_user_name, password, host, port, db_name, db_dialect, db_encoding)
             except (DatabaseError, DialectError) as error:
                 flash(str(error))
                 message = str(error)
-                return render_template('db-connect.html', username = session['username'], engine_1 = engine_1, engine_no = engine_no, message = message)
+                return render_template('db-connect.html', user_name = user_name, engine_1 = engine_1, engine_no = engine_no, message = message)
             else:
                 if 'db-one' in request.form.keys():
                     engine_no = 1
                     if engine_1 is not None and engine_2 is not None:
-                        return render_template('db-connect.html', username = session['username'], engine_1 = engine_1, engine_no = 2, message = '')
+                        return render_template('db-connect.html', user_name = user_name, engine_1 = engine_1, engine_no = 2, message = '')
                     else:
                         engine_1 = db_engine
                         db_in_use += 1
                 elif 'db-two' in request.form.keys():
                     engine_no = 2
                     if engine_1 is None:
-                        return render_template('db-connect.html', username = session['username'], engine_1 = engine_1, engine_no = 1, message = '')
+                        return render_template('db-connect.html', user_name = user_name, engine_1 = engine_1, engine_no = 1, message = '')
                     elif engine_1 is not None and engine_1.url == db_engine.url:
                         engine_2 = None
                         message = 'Sie haben sich bereits eine Tabelle aus dieser Datenbank ausgesucht. Bitte verbinden Sie sich mit einer anderen.'
                         flash(message)
-                        return render_template('db-connect.html', username = session['username'], engine_1 = engine_1, engine_no = engine_no, message = message)
+                        return render_template('db-connect.html', user_name = user_name, engine_1 = engine_1, engine_no = engine_no, message = message)
                     else:
                         engine_2 = db_engine
                         db_in_use += 2
@@ -174,6 +175,7 @@ def select_tables():
     global tables_in_use
     global meta_data_table_1
     global meta_data_table_2
+    user_name = session['username']
     engine_no = int(request.form['engine-no'])
     engine = None
     table_names = request.form.getlist('selected-table')
@@ -205,7 +207,7 @@ def select_tables():
         else:
             db_name = meta_data_table_1.engine.url.database
             data = get_full_table_ordered_by_primary_key(meta_data_table_1)
-            return render_template('search.html', db_name = db_name, table_name = table_name, table_columns = columns, data = data, searched_string = '')  
+            return render_template('search.html', user_name = user_name, db_name = db_name, table_name = table_name, table_columns = columns, data = data, searched_string = '')  
     elif tables_in_use == 3:
         return redirect(url_for('compare_two_tables'))
         
@@ -219,6 +221,7 @@ def search_entries():
         return redirect(url_for('compare_two_tables'))
     elif tables_in_use == 0:
         return redirect(url_for('set_up_db_connection'))
+    user_name = session['username']
     db_name = engine_1.url.database
     table_name = meta_data_table_1.table_name
     table_columns = meta_data_table_1.columns
@@ -239,19 +242,19 @@ def search_entries():
         else:
             data = search_string(meta_data_table_1, string_to_search, column_names)
         searched_string = string_to_search
-    return render_template('search.html', db_name = db_name, table_name = table_name, searched_string = searched_string, table_columns = table_columns, data = data)
+    return render_template('search.html', user_name = user_name, db_name = db_name, table_name = table_name, searched_string = searched_string, table_columns = table_columns, data = data)
 
 @app.route('/replace', methods = ['GET', 'POST'])
 def search_and_replace_entries():
     if not session.get('logged_in'):
         return redirect(url_for('start'))
+    user_name = session['username']
     db_name = engine_1.url.database
     table_name = meta_data_table_1.table_name
     table_columns = meta_data_table_1.columns
-    primary_keys = meta_data_table_1.primary_keys
     if request.method == 'GET':
         data = get_full_table_ordered_by_primary_key(meta_data_table_1)
-        return render_template('replace.html', db_name = db_name, table_name = table_name, table_columns = table_columns, data = data)
+        return render_template('replace.html', user_name = user_name, db_name = db_name, table_name = table_name, table_columns = table_columns, data = data)
     elif request.method == 'POST':
         string_to_replace = request.form['string-to-replace']
         replacement_string = request.form['replacement-string']
@@ -282,19 +285,20 @@ def search_and_replace_entries():
             data = get_full_table_ordered_by_primary_key(meta_data_table_1)
         replacement_occurrence_dict = None
         flash(message)
-        return render_template('replace.html', db_name = db_name, table_name = table_name, table_columns = table_columns, data = data)
+        return render_template('replace.html', user_name = user_name, db_name = db_name, table_name = table_name, table_columns = table_columns, data = data)
 
 @app.route('/replace-preview', methods = ['GET', 'POST'])
 def select_entries_to_update():
     if not session.get('logged_in'):
         return redirect(url_for('start'))
+    user_name = session['username']
     db_name = engine_1.url.database
     table_name = meta_data_table_1.table_name
     table_columns = meta_data_table_1.columns
     # /replace-preview kann nicht über GET-Requests aufgerufen werden
     if request.method == 'GET':
         data = get_full_table_ordered_by_primary_key(meta_data_table_1, convert = False)
-        return render_template('replace.html', db_name = db_name, table_name = table_name, table_columns = table_columns, data = data)
+        return render_template('replace.html', user_name = user_name, db_name = db_name, table_name = table_name, table_columns = table_columns, data = data)
     elif request.method == 'POST':
         # neu einzusetzender String
         input = request.form['replacement']
@@ -328,12 +332,10 @@ def select_entries_to_update():
                     attribute_list[index] = 1
                     # Da nur eine Spalte durchsucht wird, kann die Schleife anschließend abgebrochen werden.
                     break
-        print('Before: ', attribute_list)
+       
         message = ''
         # Nun wird die Attributliste mit entweder nur Einsen oder nur Nullen und einer Eins durchiteriert ...       
         for index, attribute in enumerate(attribute_list):
-            print('spalten: ', table_columns)
-            print('Attribute: ', affected_attributes)
             # ... und für jede Eins, d. h. jedes betroffene Attribut ...
             if attribute:
                 # ... überprüft, ob der im Browser eingegebene String als der entsprechende Datentyp (int oder float) interpretiert werden kann
@@ -357,7 +359,7 @@ def select_entries_to_update():
             # ... daher wird dies als Fehlermeldung ausgegeben ...
             flash(f'Der eingegebene Wert \'{input}\' ist nicht mit allen Datentypen und/oder Constraints der ausgewählten Spalten kompatibel und in den verbleibenden Spalten wurden keine passenden Einträge gefunden. Bitte versuchen Sie es erneut.')
             # ... und der Nutzer wird zur Startseite der Suchen-und-Ersetzen-Funktion weitergeleitet.
-            return render_template('replace.html', db_name = db_name, table_name = table_name, table_columns = table_columns, data = unchanged_data)
+            return render_template('replace.html', user_name = user_name, db_name = db_name, table_name = table_name, table_columns = table_columns, data = unchanged_data)
         # Steht noch mindestens eine Eins in attribute_list, ist der eingegebene Wert mit mindestens einem durchsuchten Attribut kompatibel, jedoch
         # wurden manche Attribute aus der Suche ausgeschlossen. Hier wird ermittelt, welche Nachricht/Fehlermeldung hierzu ausgegeben werden soll.
         elif sum(attribute_list) < len(attribute_list):
@@ -377,41 +379,39 @@ def select_entries_to_update():
             replacement_data_dict, replacement_occurrence_dict = get_replacement_information(meta_data_table_1, attributes_and_positions, string_to_search, input) 
         # Falls dabei Fehler auftreten, ...
         except Exception as error:
-             raise error
-            # ... wird die Fehlermeldung übernommen ...
-           # flash(str(error))
+            flash(str(error))
             # ... und der Nutzer zur Startseite der Suchen-und-Ersetzen-Funktion weitergeleitet.
-            #return render_template('replace.html', db_name = db_name, table_name = table_name, table_columns = table_columns, data = unchanged_data)
+            return render_template('replace.html', user_name = user_name, db_name = db_name, table_name = table_name, table_columns = table_columns, data = unchanged_data)
         # Falls keine Fehler auftreten, ...
         else:
             # ... das Ergebnis jedoch leer ist, ...
             if len(replacement_data_dict.values()) == 0:
                 # ... wird dies auf der Webseite angezeigt.
                 flash('Keine passenden Einträge gefunden.')
-                return render_template('replace.html', db_name = db_name, table_name = table_name, table_columns = table_columns, data = unchanged_data)
+                return render_template('replace.html', user_name = user_name, db_name = db_name, table_name = table_name, table_columns = table_columns, data = unchanged_data)
             else:
-                # Anderenfalls werden die Meldungen für den Ausschluss von Attributen angezeigt
+                # Anderenfalls werden die Meldungen für den Ausschluss von Attributen angezeigt ...
                 flash(message)
-                # und mithilfe der gewonnenen Daten wird unter localhost:8000/replace-preview die Vorschau erstellt.
-                return render_template('replace-preview.html', db_name = db_name, table_name = table_name, occurrence_dict = replacement_occurrence_dict, table_columns = table_columns, string_to_replace = string_to_search, replacement_string = input, replacement_data_dict = replacement_data_dict, affected_attributes = affected_attributes)
+                # ... und mithilfe der gewonnenen Daten wird unter localhost:8000/replace-preview die Vorschau erstellt.
+                return render_template('replace-preview.html', user_name = user_name, db_name = db_name, table_name = table_name, occurrence_dict = replacement_occurrence_dict, table_columns = table_columns, string_to_replace = string_to_search, replacement_string = input, replacement_data_dict = replacement_data_dict, affected_attributes = affected_attributes)
 
 
 @app.route('/unify', methods = ['GET', 'POST'])
 def unify_db_entries():
     if not session.get('logged_in'):
         return redirect(url_for('start'))
+    # Beziehen des Benutzernamens
+    user_name = session['username']
     db_name = engine_1.url.database
     table_name = meta_data_table_1.table_name
     table_columns = meta_data_table_1.columns
     primary_keys = meta_data_table_1.primary_keys
     message = ''
-    for item in request.args:
-        print(item)
     if request.method == 'GET':
         data = get_full_table_ordered_by_primary_key(meta_data_table_1)
     elif request.method == 'POST':
         attribute_to_change = request.form['column-to-unify']
-        # \ wird beim Auslesen zu \\ -> muss rückgängig gemacht werden, weil Parameter zweimal an HTML-Dokumente gesendet wird
+        # \ wird beim Auslesen zu \\ -> muss rückgängig gemacht werden, weil diese Parameter zweimal an HTML-Dokumente gesendet werden
         old_values = request.form['old-values'].replace('[', '').replace(']', '').replace('\'', '').replace('\\\\', '\\').split(', ')
         new_value = request.form['new-value']
         message = 'Änderungen erfolgreich durchgeführt.'
@@ -421,72 +421,108 @@ def unify_db_entries():
             message = str(error)
         data = get_full_table_ordered_by_primary_key(meta_data_table_1)
         flash(message)
-    return render_template('unify.html', db_name = db_name, table_columns = table_columns, primary_keys = primary_keys, data = data, table_name = table_name, engine_no = 1)    
+    return render_template('unify.html', user_name = user_name, db_name = db_name, table_columns = table_columns, primary_keys = primary_keys, data = data, table_name = table_name, engine_no = 1)    
 
 @app.route('/unify-selection', methods = ['GET', 'POST'])
 def select_entries_to_unify():
+    """Funktion für die Anzeige der Auswahl der zu vereinheitlichenden Einträge. Nur per POST-Request für eingeloggte Nutzer aufrufbar."""
     if not session.get('logged_in'):
         return redirect(url_for('start'))
     elif request.method == 'GET':
         return redirect(url_for('unify_db_entries'), code = 302)
     elif request.method == 'POST':
+        # Beziehen des Benutzernamens
+        user_name = session['username']
+        ### Beziehen des Datenbanknamens, des Tabellennamens und des von der Vereinheitlichung betroffenen Attributs für die Anzeige ###
         db_name = engine_1.url.database
         table_name = request.form['table-name']
         column_to_unify = request.form['column-to-unify']
+        # Beziehen der einzigartigen Werte in der Tabelle, inkl. der Anzahl ihrer Vorkommen
         data = get_unique_values_for_attribute(meta_data_table_1, column_to_unify)
-        return render_template('unify-selection.html', db_name = db_name, table_name = table_name, column_to_unify = column_to_unify, data = data, engine_no = 1)
+        # Anzeige in unify-selection.html
+        return render_template('unify-selection.html', user_name = user_name, db_name = db_name, table_name = table_name, column_to_unify = column_to_unify, data = data, engine_no = 1)
 
 @app.route('/unify-preview', methods = ['GET', 'POST'])
 def show_affected_entries():
+    """Funktion für die Anzeige der Vorschau der von der Vereinheitlichung betroffenen Einträge. Nur per POST-Request für eingeloggte Nutzer aufrufbar."""
     if not session.get('logged_in'):
         return redirect(url_for('start'))
     elif request.method == 'GET':
         return redirect(url_for('unify_db_entries'), code = 302)
     elif request.method == 'POST':
+        # Beziehen des Benutzernamens
+        user_name = session['username']
+        ### Beziehen der Argumente für update_to_unify_entries aus dem Request ### 
         db_name = engine_1.url.database
         table_name = meta_data_table_1.table_name
         table_columns = meta_data_table_1.columns
         column_to_unify = request.form['column-to-unify']
-        print(column_to_unify)
         new_value = request.form['replacement']
-        if new_value in ('', 'None', 'NULL'):
+        # einheitlicher Umgang mit leeren Werten
+        if new_value in ('', 'None', 'NULL', None):
             new_value = None
+        # Beziehen der zu ersetzenden Werte, ...
         old_values = list()
         for key in request.form.keys():
+            # ... die in der HTML-Datei über ganzzahlige Schlüssel (Namen) identifiziert sind.
             if re.match(r'^[0-9]+$', key):
                 old_values.append(request.form[key])
+        # Beziehen der einzigartigen Einträge im ausgewählten Attribut der Tabelle, inkl. der Anzahl der Vorkommen
         unique_values = get_unique_values_for_attribute(meta_data_table_1, column_to_unify)
+        # Es muss mindestes ein Wert ausgewählt werden, der verändert werden soll. Ist das nicht der Fall, ...
         if len(old_values) < 1:
             data = unique_values
+            # ... wird hierzu eine Fehlermeldung ausgegeben ...
             flash('Bitte wählen Sie mindestens ein zu bearbeitendes Attribut aus und versuchen Sie es erneut.')
-            return render_template('unify-selection.html', db_name = db_name, table_name = table_name, column_to_unify = column_to_unify, data = data, engine_no = 1)
+            # ... und die Auswahl erneut aufgerufen.
+            return render_template('unify-selection.html', user_name = user_name, db_name = db_name, table_name = table_name, column_to_unify = column_to_unify, data = data, engine_no = 1)
+        # Stimmt die Anzahl der ausgewählten Einträge, wird überprüft, ob der neue Wert mit zu verändernden Attribut kompatibel ist.
         validity = check_validity_of_input_and_searched_value(meta_data_table_1, new_value, column_to_unify, old_values[0])
+        # Bei Kompatibilität wird hier der Wert 0 ausgegeben. Ist das nicht der Fall, ...
         if validity != 0:
+            # ... wird die erhaltene Fehlermeldung ...
             flash(validity)
-            return render_template('unify-selection.html', db_name = db_name, table_name = table_name, column_to_unify = column_to_unify, data = data, engine_no = 1)
+            # ... auf der neu geladenen Seite mit der Auswahl der zu vereinheitlichenden Vorkommen angezeigt.
+            return render_template('unify-selection.html', user_name = user_name, db_name = db_name, table_name = table_name, column_to_unify = column_to_unify, data = data, engine_no = 1)
+        # Besteht Kompatibilität, ...
         else:
             try:
+                # ... wird die Änderung 'simuliert', d. h. ausgeführt, aber durch Auslassen von commit() nicht in die Datenbank geschrieben.
                 update_to_unify_entries(meta_data_table_1, column_to_unify, old_values, new_value, False)
+            # Treten hierbei Fehler auf, ...
             except Exception as error:
+                # ... werden diese für Constraints gefiltert ...
                 if 'constraint' in str(error).lower():
                     flash('Der eingegebene neue Wert verletzt eine Bedingung (Constraint) Ihrer Datenbank. Bitte versuchen Sie es erneut.')
+                # ... und ansonsten unverändert ausgegeben.
+                else:
+                    flash(str(error))
                 data = unique_values
-                return render_template('unify-selection.html', db_name = db_name, table_name = table_name, column_to_unify = column_to_unify, data = data, engine_no = 1)
+                # Auch in diesem Fall wird die Auswahl für die zu vereinheitlichenden Einträge mit der Fehlermeldung erneut aufgerufen.
+                return render_template('unify-selection.html', user_name = user_name, db_name = db_name, table_name = table_name, column_to_unify = column_to_unify, data = data, engine_no = 1)
         
-        index_of_affected_attribute = 0
-        
+        ### Beziehen der unveränderten und der aktualisierten Daten für die dynamische Darstellung im Browser
+        # unveränderte Tabelle
         data = get_full_table_ordered_by_primary_key(meta_data_table_1)
+        # Abfrage der Zeilennummer der von der Vereinheitlichung betroffenen Einträge (von 1 an gezählt)
         affected_entries = get_row_number_of_affected_entries(meta_data_table_1, [column_to_unify], old_values, mode = 'unify')
+        # Herausfiltern der Nummern aus dem CursorResult in eine Liste
         affected_rows = []
         for row in affected_entries:
             affected_rows.append(row[0])
-        row_total = meta_data_table_1.total_row_count
+        # Feststellung der Position des betroffenen Attributs in der Anzeige
+        index_of_affected_attribute = 0
         for index, column in enumerate(table_columns):
+            # Wenn das aktuelle Attribut das von der Änderung betroffene ist, ...
             if column == column_to_unify:
+                # ... entspricht seine Position in der Anzeige dem Index in der Attributliste + 1 (weil der Zähler in der HTML-Datei bei 1 beginnt)
                 index_of_affected_attribute = index + 1
+                # Da nur ein Attribut gleichzeitig von der Vereinheitlichung betroffen ist, kann die Schleife anschließend abgebrochen werden.
                 break
-        
-        return render_template('unify-preview.html', db_name = db_name, table_name = table_name, table_columns = table_columns, column_to_unify = column_to_unify, old_values = old_values, new_value = new_value, data = data, index_of_affected_attribute = index_of_affected_attribute, affected_rows = affected_rows, row_total = row_total)
+        # Gesamtanzahl der Tupel für die Statistik unter der Tabelle
+        row_total = meta_data_table_1.total_row_count
+        # Anzeige der Vorschau
+        return render_template('unify-preview.html', user_name = user_name, db_name = db_name, table_name = table_name, table_columns = table_columns, column_to_unify = column_to_unify, old_values = old_values, new_value = new_value, data = data, index_of_affected_attribute = index_of_affected_attribute, affected_rows = affected_rows, row_total = row_total)
 
 @app.route('/compare', methods = ['GET', 'POST'])
 def compare_two_tables():
@@ -498,10 +534,11 @@ def compare_two_tables():
         elif tables_in_use == 1:
             engine_no = 2
         return redirect(url_for('show_db_login_page', engine_no = engine_no))
+    user_name = session['username']
     if request.method == 'GET':
         global compatibility_by_code
         compatibility_by_code = check_basic_data_type_compatibility(meta_data_table_1, meta_data_table_2)
-        return show_both_tables_separately(meta_data_table_1, meta_data_table_2, compatibility_by_code, 'compare')
+        return show_both_tables_separately(meta_data_table_1, meta_data_table_2, compatibility_by_code, 'compare', user_name)
     elif request.method == 'POST':
         target_table = request.form['target-table']
         join_attribute_string = request.form['attribute-selection']
@@ -551,7 +588,7 @@ def compare_two_tables():
         table_name_1 = table_meta_data_for_join_1.table_name
         table_name_2 = table_meta_data_for_join_2.table_name
         
-        return render_template('joined-preview.html', db_name_1 = db_name_1, db_name_2 = db_name_2, table_name_1 = table_name_1, table_name_2 = table_name_2, db_dialects = dialects, join_attribute_1 = join_attributes[0], join_attribute_2 = join_attributes[1], table_columns = column_names, data = data, unmatched_rows = unmatched_rows, mode = 'compare')
+        return render_template('joined-preview.html', user_name = user_name, db_name_1 = db_name_1, db_name_2 = db_name_2, table_name_1 = table_name_1, table_name_2 = table_name_2, db_dialects = dialects, join_attribute_1 = join_attributes[0], join_attribute_2 = join_attributes[1], table_columns = column_names, data = data, unmatched_rows = unmatched_rows, mode = 'compare')
 
 
 @app.route('/merge', methods = ['GET', 'POST'])
@@ -567,10 +604,11 @@ def merge_tables():
         elif tables_in_use == 1:
             engine_no = 2
         return redirect(url_for('show_db_login_page', engine_no = engine_no))
+    user_name = session['username']
     if request.method == 'GET':
         if compatibility_by_code is None:
             compatibility_by_code = check_basic_data_type_compatibility(meta_data_table_1, meta_data_table_2)
-        return show_both_tables_separately(meta_data_table_1, meta_data_table_2, compatibility_by_code, 'merge')
+        return show_both_tables_separately(meta_data_table_1, meta_data_table_2, compatibility_by_code, 'merge', user_name)
     elif request.method == 'POST':
         global merge_query
         global source_attribute
@@ -666,6 +704,7 @@ def show_merge_preview():
             return redirect(url_for('merge_tables'))
         else:
             if merge_result is not None and len(merge_result) == 3:
+                user_name = session['username']
                 result = merge_result[0]
                 merge_query = merge_result[1]
                 query_parameters = merge_result[2]
@@ -681,7 +720,7 @@ def show_merge_preview():
                 table_name_2 = meta_data_table_2.table_name
                 table_columns = list(result.keys())
                 data = convert_result_to_list_of_lists(result)
-                return render_template('joined-preview.html', db_name_1 = db_name_1, db_name_2 = db_name_2, table_name_1 = table_name_1, table_name_2 = table_name_2, db_dialects = db_dialects, db_name = target_table_data.engine.url.database, table_name = target_table_data.table_name, new_column_name = new_column_name, table_columns = table_columns, data = data,  mode = 'merge', target_meta_data_no = target_meta_data_no)
+                return render_template('joined-preview.html', user_name = user_name, db_name_1 = db_name_1, db_name_2 = db_name_2, table_name_1 = table_name_1, table_name_2 = table_name_2, db_dialects = db_dialects, db_name = target_table_data.engine.url.database, table_name = target_table_data.table_name, new_column_name = new_column_name, table_columns = table_columns, data = data,  mode = 'merge', target_meta_data_no = target_meta_data_no)
             else:
                 flash('Die Datenbankabfrage für die Vorschau konnte nicht erstellt werden. Bitte versuchen Sie es erneut.')
                 return redirect(url_for('merge_tables'))
@@ -726,11 +765,11 @@ def disconnect_from_db(engine_no:int):
         flash(message)
         return redirect(url_for('show_db_login_page', engine_no = engine_no))
 
-@app.route('/logout', methods = ['GET', 'POST'])
+@app.route('/logout', methods = ['GET'])
 def logout():
-    if not session.get('logged_in') or request.method == 'GET':
+    if not session.get('logged_in'):
         return redirect(url_for('start'))
-    elif request.method == 'POST':
+    elif request.method == 'GET':
         # Daten der Session entfernen, um den Nutzer auszuloggen
         session.pop('loggedin', None)
         session.pop('username', None)
@@ -757,17 +796,35 @@ def logout():
 
 if __name__ == '__main__':
     maria_engine = connect_to_db('root', 'arc-en-ciel', 'localhost', 3306, 'MariaTest', 'mariadb', 'utf8')
-    dtinfo = get_data_type_meta_data(maria_engine, 'Uebung_Datenbanken_SS2024')
-    tbm = TableMetaData(maria_engine, 'Uebung_Datenbanken_SS2024', ['Matrikelnummer'], dtinfo, 11)
+    # dtinfo = get_data_type_meta_data(maria_engine, 'Uebung_Datenbanken_SS2024')
+    # tbm = TableMetaData(maria_engine, 'Uebung_Datenbanken_SS2024', ['Matrikelnummer'], dtinfo, 11)
     postgres_engine = connect_to_db('postgres', 'arc-en-ciel', 'localhost', 5432, 'PostgresTest1', 'postgresql', 'UTF8')
-    table_name = 'Vorlesung_Datenbanken_SS2024'
-    primary_keys = get_primary_key_from_engine(postgres_engine, table_name)
-    data_type_info = get_data_type_meta_data(postgres_engine, table_name)
-    row_count = get_row_count_from_engine(postgres_engine, table_name)
-    tbm2 = TableMetaData(postgres_engine, table_name, primary_keys, data_type_info, row_count)
-    print('SIMULATRE', simulate_merge_and_build_query(tbm2, tbm, ['Matrikelnummer', 'Matrikelnummer'], 'Punktzahl'))
-    maria_replacement_info = get_replacement_information(tbm, [('Matrikelnummer', 0), ('Vorname', 1), ('Nachname', 0)], 'Jo', 'Jojo')
-    print('MRI: ', maria_replacement_info)
+    # table_name = 'Vorlesung_Datenbanken_SS2024'
+    # primary_keys = get_primary_key_from_engine(postgres_engine, table_name)
+    # data_type_info = get_data_type_meta_data(postgres_engine, table_name)
+    # row_count = get_row_count_from_engine(postgres_engine, table_name)
+    # tbm2 = TableMetaData(postgres_engine, table_name, primary_keys, data_type_info, row_count)
+    # print('ADD CONST', add_constraints_to_new_attribute(tbm2, tbm, 'Punktzahl', 'Punktzahl'))
+    # print('SIMULATRE', simulate_merge_and_build_query(tbm2, tbm, ['Matrikelnummer', 'Matrikelnummer'], 'Punktzahl'))
+    # maria_replacement_info = get_replacement_information(tbm, [('Matrikelnummer', 0), ('Vorname', 1), ('Nachname', 0)], 'Jo', 'Jojo')
+    # print('MRI: ', maria_replacement_info)
+    # table_name = 'Uebung_Datenbanken_SS2024'
+    # primary_keys = get_primary_key_from_engine(postgres_engine, table_name)
+    # data_type_info = get_data_type_meta_data(postgres_engine, table_name)
+    # row_count = get_row_count_from_engine(postgres_engine, table_name)
+    # pg_table_meta_data_2 = TableMetaData(postgres_engine, table_name, primary_keys, data_type_info, row_count)
+    # table_name = 'Vorlesung_Datenbanken_SS2024'
+    # primary_keys = get_primary_key_from_engine(maria_engine, table_name)
+    # data_type_info = get_data_type_meta_data(maria_engine, table_name)
+    # row_count = get_row_count_from_engine(maria_engine, table_name)
+    # md_table_meta_data_1 = TableMetaData(maria_engine, table_name, primary_keys, data_type_info, row_count)
+    # meta_data = [pg_table_meta_data_2, md_table_meta_data_1]
+    # attributes_to_join_on = ['Matrikelnummer', 'Matrikelnummer']
+    # select_1 = ['Punktzahl', 'zugelassen']
+    # select_2 = ['Matrikelnummer']
+    # table_result, column_names, unmatched_rows = join_tables_of_different_dialects_dbs_or_servers(meta_data, attributes_to_join_on, select_1, select_2)
+    # print(table_result)
+    print(get_data_type_meta_data(maria_engine, 'Uebung_Datenbanken_SS2024'))
     app.secret_key = os.urandom(12)
     serve(app, host = '0.0.0.0', port = 8000)
     

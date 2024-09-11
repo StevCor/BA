@@ -7,18 +7,24 @@
     <title>SQL-Datenbanken{% block title %}
         {% endblock title %}</title>
     <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
-    <!--<link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">-->
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
 
 </head>
 
 <body>
     <input type="hidden" id="database-name" value="{{ db_name }}">
+    <nav class="navtop">
+        <div>
+            <h1>Willkommen, {{user_name}}!</h1>
+            <div class="connection">
+                <h3>Verbunden mit Datenbank {{ db_name }}, Tabelle {{ table_name }} </h3>
+                <a href="{{ url_for('disconnect_from_db', engine_no = 1) }}"><button id="disconnect">Datenbankverbindung
+                        trennen </button></a>
+                <a href="{{ url_for('logout') }}"><button>Logout</button></a>
+            </div>
+        </div>
+    </nav>
 
-    <div class="connection">
-        <h3>Verbunden mit Datenbank {{ db_name }}, Tabelle {{ table_name }} </h3>
-        <a href="{{ url_for('disconnect_from_db', engine_no = 1) }}"><button id="disconnect">Verbindung
-                trennen </button></a>
-    </div>
 
     <div class="links">
         <button id="back">Zurück</button>
