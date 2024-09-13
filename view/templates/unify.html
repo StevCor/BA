@@ -1,7 +1,9 @@
+<!-- beruht auf der Vorlage für Seiten für Operationen auf einer Tabelle -->
 {% extends "one-table-template.html" %}
 
 {% block title %}: Vereinheitlichen{% endblock title %}
 
+<!-- Aktivierung des Links zur Vereinheitlichungsfunktion in der Navigationsleiste -->
 {% block unify_active %} class="active" {% endblock unify_active %}
 
 {% block one_table_form %}
@@ -9,9 +11,11 @@
     Bitte wählen Sie die Spalte aus, deren Einträge vereinheitlicht werden sollen. Primärschlüssel können
     hiermit nicht bearbeitet
     werden.
+    <!-- Bündelung der Input-Elemente für die Operationsausführung und ihrer Labels, damit sie hintereinander stehen -->
     <div class="groups">
+        <!-- Gruppierung des Dropdown-Menüs zur Attributauswahl mit seinem Label -->
         <div class="item">
-            <label for="column-to-unify">Spalte auswählen:</label>
+            <label class="colored" for="column-to-unify">Spalte auswählen:</label>
             <select name="column-to-unify" id="column-to-unify" required>
                 {% for column in table_columns %}
                 {% if column not in primary_keys %}
@@ -20,11 +24,12 @@
                 {% endfor %}
             </select>
         </div>
+        <!-- Gruppierung des Absende-Buttons des Formulars -->
         <div class="item">
             <input type="submit" value="Einträge überprüfen">
         </div>
     </div>
-    <input type="hidden" id="engine-no" name="engine-no" value="{{ engine_no }}">
+    <!-- Übermittlung des Tabellennamens für die Ausführung der Vereinheitlichung auf Grundlage der Vorschau -->
     <input type="hidden" id="table-name" name="table-name" value="{{ table_name }}">
 
 </form>

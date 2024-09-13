@@ -896,7 +896,7 @@ def build_query_to_add_column(table_meta_data:TableMetaData, attribute_name:str,
     # Für Serial-Datentypen sind Unique-Constraints und Standardwerte implizit durch den Datentyp festgelegt, daher können sie hier ausgelassen werden.
     if 'serial' not in data_type:
         # Für Unique-Constraints ...
-        if target_column_data_type_info['is_unique']:
+        if 'is_unique' in target_column_data_type_info.keys() and target_column_data_type_info['is_unique']:
             # ... wird dem Datentyp das Schlüsselwort UNIQUE angehängt.
             data_type = f'{data_type} UNIQUE'
         # Auch der Standardwert kann hier festgelegt werden.
@@ -1143,27 +1143,29 @@ def list_attributes_to_select(attributes_to_select:list[str], dialect:str, table
     if dialect != 'mariadb' and dialect != 'postgresql':
         raise DialectError(f'Der SQL-Dialekt {dialect} wird nicht unterstützt.')
     attribute_string = ''
+    # Wenn der Tabellenname mit aufgelistet werden soll ...
+    if table_name is not None:
+        # ... und noch nicht von Anführungszeichen umgeben ist, ...
+        if not table_name.startswith('"') and not table_name.endswith('"'):
+            # ... wird dieser ggf. mit Trennzeichen versehen.
+            table_name = convert_string_if_contains_capitals_or_spaces(table_name, dialect)
+        # Wenn der Datenbankname mit aufgelistet werden soll ...
+        if db_name is not None:
+            # ... und noch nicht von Anführungszeichen umgeben ist, ...
+            if not db_name.startswith('"') and not db_name.endswith('"'):
+                # ... wird dieser ebenso ggf. mit Trennzeichen versehen ...
+                db_name = convert_string_if_contains_capitals_or_spaces(db_name, dialect)
+            # ... und dem Tabellennamen durch einen Punkt abgetrennt vorangestellt.
+            table_name = f'{db_name}.{table_name}'
     for index, attribute in enumerate(attributes_to_select):
         # Erstellen einer Kopie des Attributnamens, damit diese ggf. mit Trennzeichen versehen werden kann
         query_attribute = attribute
-        # Wenn der Tabellenname mit aufgelistet werden soll ...
-        if table_name != None:
-            # ... und noch nicht von Anführungszeichen umgeben ist, ...
-            if not table_name.startswith('"') and not table_name.endswith('"'):
-                # ... wird dieser ggf. mit Trennzeichen versehen.
-                table_name = convert_string_if_contains_capitals_or_spaces(table_name, dialect)
-            # Wenn der Datenbankname mit aufgelistet werden soll ...
-            if db_name != None:
-                # ... und noch nicht von Anführungszeichen umgeben ist, ...
-                if not db_name.startswith('"') and not db_name.endswith('"'):
-                    # ... wird dieser ebenso ggf. mit Trennzeichen versehen ...
-                    db_name = convert_string_if_contains_capitals_or_spaces(db_name, dialect)
-                # ... und dem Tabellennamen durch einen Punkt abgetrennt vorangestellt.
-                table_name = f'{db_name}.{table_name}'
-            # Analog wird die Kopie des Attributs ggf. mit Trennzeichen versehen.
-            if not query_attribute.startswith('"') and not not query_attribute.endswith('"'):
-                query_attribute = convert_string_if_contains_capitals_or_spaces(query_attribute, dialect)
-            # Anschließend werden alle Elemente zusammengefügt.
+        # Diese wird mit Trennzeichen versehen, falls sie Grobuchstaben (PostgreSQL) oder Leerzeichen (MariaDB und PostgreSQL) enthält.
+        if not query_attribute.startswith('"') and not query_attribute.endswith('"'):
+            query_attribute = convert_string_if_contains_capitals_or_spaces(query_attribute, dialect)
+        # Wenn der Tabellenname (ggf. mit Datenbankname) mit angegeben werden soll, ...
+        if table_name is not None:
+            # ... wird er dem Attribut vorangestellt.
             query_attribute = f'{table_name}.{query_attribute}'
         # Das erste aufzulistende Attribut wird übernommen.
         if index == 0:

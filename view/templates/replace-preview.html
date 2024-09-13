@@ -1,20 +1,28 @@
+<!-- Beruht auf der Vorlage für die Vorschau für Operationen auf einer Tabelle -->
 {% extends "one-table-preview-template.html" %}
+
 {% block title %}
 : Ersetzungsvorschau
 {% endblock title %}
+
+<!-- Aktivierung des Links zur Ersetzungsfunktion in der Navigationsleiste -->
 {% block replace_active %}
 class="active"
 {% endblock replace_active %}
+
 {% block preview_content %}
 <!-- Anzeige der Tabelle mit den Vorkommen des zu ersetzenden Strings -->
 <h4>Bitte wählen Sie aus, welche Vorkommen von '{{ string_to_replace}}' durch '{{ replacement_string }}' ersetzt
     werden sollen:</h4>
 <!-- Formular für die Auswahl der Stringvorkommen, die tatsächlich ersetzt werden sollen -->
-<form action="{{ '/replace' }}" method="POST"> <!-- onclick="toggle(this);" -->
+<form action="{{ '/replace' }}" method="POST">
+    <!--- Checkbox zur (De-)Aktivierung aller Checkboxen für die einzelnen Vorkommen des zu ersetzenden Wertes -->
     <input type="checkbox" id="all" value="all" checked>
     <label for="all">Alle auswählen</label>
+    <!-- Vorschautabelle -->
     <div id="table">
         <table id="preview">
+            <!-- Kopfzeile der Tabelle mit den Attributnamen -->
             <thead>
                 <tr>
                     {% for column in table_columns %}
@@ -23,26 +31,44 @@ class="active"
                 </tr>
             </thead>
             <tbody>
+                {# Zähler für die Vorkommen des zu ersetzenden Wertes (übernommen von
+                https://stackoverflow.com/questions/7537439/how-to-increment-a-variable-on-a-for-loop-in-jinja-template)
+                #}
                 {% set occurrence_count = [] %}
+                {# Anlegen einer Tabellenzeile für jeden Wert des Ersetzungs-Dictionarys #}
                 {% for row in replacement_data_dict.values() %}
                 <tr>
+                    {# Zähler zur Ermittlung der Position betroffener Attribute #}
                     {% set attribute_count = [] %}
+                    {# Für jede Eins in der Positionsliste ... #}
                     {% for index in row['positions'] %}
                     {% if index == 1 %}
+                    {# ... wird der Vorkommenszähler um eins erhöht ... #}
                     {% set __ = occurrence_count.append(1) %}
-                    <td><!-- onclick="switchData(this, this);" -->
+                    {# ... und es wird eine Tabellenzelle mit einer Checkbox angelegt, deren id dem Vorkommenszählerwert
+                    entspricht.
+                    Der Wert vor der Erstzung wird in das Attribut 'data-old' geschrieben, der neue Wert steht in
+                    'data-new'. Dadurch ist es
+                    möglich, bei An- bzw. Abwahl der Checkbox mit JavaScript zwischen der Anzeige des neuen und des
+                    alten Wertes zu wechseln. #}
+                    <td>
                         <input type="checkbox" class="selection" name="selection" checked
                             data-old="{{ row['old'][attribute_count | length] }}"
                             data-new="{{ row['new'][attribute_count | length] }}" id="{{ occurrence_count | length }}"
                             value="{{ occurrence_count | length }}">
+                        {# Der Wert wird in Form eines Labels für die Checkbox eingetragen. Anfangs steht hier der neue
+                        Wert. #}
                         <label for="{{ occurrence_count | length }}"
                             id="{{ 'label' + (occurrence_count | length | string) }}" class="highlight">{{
                             row['new'][attribute_count | length] }}
                         </label>
                     </td>
+                    {# Für alle nicht betroffenen Attribute wird der alte Wert als einfacher Text ohne Checkbox in die
+                    Tabellenzelle eingetragen. #}
                     {% else %}
                     <td>{{ row['old'][attribute_count | length] }}</td>
                     {% endif %}
+                    {# Hochsetzen des Attributszählers des aktuellen Datenbanktupels #}
                     {% set __ = attribute_count.append(1) %}
                     {% endfor %}
                 </tr>
@@ -51,10 +77,14 @@ class="active"
         </table>
 
     </div>
+    <!-- Statistik für die tatsächlich veränderten Vorkommen des gesuchten Wertes -->
     <span class="counter">{{ occurrence_count | length }} </span> von {{ occurrence_count | length }}
     betroffenen Einträgen werden verändert.
-    <button id="backButton">Abbrechen</button>
-    <input type="submit" value="Änderungen durchführen">
+    <div class="groups">
+        <button id="backButton">Abbrechen</button>
+        <input type="submit" value="Änderungen durchführen">
+    </div>
+    <!-- Daten, die für den Nutzer irrelevant sind, aber für die Ausführung der Ersetzung auf Basis dieser Vorschau benötigt werden -->
     <input type="hidden" name="string-to-replace" value="{{ string_to_replace }}">
     <input type="hidden" name="replacement-string" value="{{ replacement_string }}">
     <input type="hidden" name="affected-attributes" value="{{ affected_attributes }}">
@@ -120,9 +150,12 @@ class="active"
             }
         }
         let selectedEntries = document.querySelector('.counter');
+        // Wenn die 'all'-Checkbox abgewählt ist, wird der Zähler für die ausgewählten Einträge auf 0 gesetzt.
         if (source.checked == false) {
             selectedEntries.innerHTML = 0;
         } else {
+            // Ist sie abgewählt, wird der Zähler auf die Anzahl der Checkboxen für die einzelnen Vorkommen gesetzt (-1, damit die 'all'-Checkbox
+            // nicht eingerechnet wird, die auch zur Liste 'checkboxes' gehört.)
             selectedEntries.innerHTML = checkboxes.length - 1;
         }
     }
@@ -130,7 +163,6 @@ class="active"
     // Hinzufügen des EventListeners für den Wechsel der angezeigten Daten bei An- bzw. Abwahl der Attributs-Checkboxen
     let attributeCheckboxes = document.getElementsByClassName('selection');
     console.log(attributeCheckboxes);
-
     for (var i = 0; i < attributeCheckboxes.length; i++) {
         attributeCheckboxes[i].addEventListener('change', function () {
             switchData(this, this);

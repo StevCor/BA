@@ -1,18 +1,23 @@
+<!-- beruht auf der Vorlage für Seiten für Operationen auf einer Tabelle -->
 {% extends "one-table-template.html" %}
 
 {% block title %}
 : Suche
 {% endblock title %}
 
+<!-- Aktivierung des Links zur Suchfunktion in der Navigationsleiste -->
 {% block search_active %} class="active" {% endblock search_active %}
 
 {% block one_table_form %}
 <form action="{{ '/search' }}" method="POST">
     Bitte wählen Sie die zu durchsuchende Spalte aus und geben den gewünschten Suchbegriff an. Ist Letzterer leer, wird
     die volle Tabelle angezeigt.
+    <!-- Bündelung der Input-Elemente für die Operationsausführung und ihrer Labels, damit sie hintereinander stehen -->
     <div class="groups">
+        <!-- Gruppierung des Dropdown-Menüs mit seinem Label -->
         <div class="item">
-            <label for="column-to-search">Spalte auswählen:</label>
+            <!-- Dropdown-Menü für die Auswahl des zu durchsuchenden Attributs -->
+            <label class="colored" for="column-to-search">Spalte auswählen:</label>
             <select name="column-to-search" id="column-to-search" required>
                 <option value="all">Alle Spalten</option>
                 {% for column in table_columns %}
@@ -24,11 +29,12 @@
                 {% endfor %}
             </select>
         </div>
+        <!-- Gruppierung des Eingabefeldes für den Suchstring mit seinem Label -->
         <div class="item">
-            <label for="search-string">Suchen:</label>
+            <label class="colored" for="search-string">Suchen:</label>
             <input type="text" id="search-string" name="search-string" value="{{ searched_string }}">
         </div>
-
+        <!-- Gruppierung des Absende-Buttons -->
         <div class="item">
             <input type="submit" value="Suchen">
         </div>

@@ -11,18 +11,24 @@ import urllib.parse
 sys.path.append('tests')
 import environmentVariables as ev
 
+### Festlegen der Fixtures, um die Objekte in den Testfunktionen nutzen zu können, ohne sie mehrfach anzulegen ###
+
+# Postgres-Engine
 @pytest.fixture
 def db_engine_1() -> Engine:
     return create_engine(f'postgresql://{ev.POSTGRES_USERNAME}:{urllib.parse.quote_plus(ev.POSTGRES_PASSWORD)}@{ev.POSTGRES_SERVERNAME}:{ev.POSTGRES_PORTNUMBER}/PostgresTest1', connect_args = {'client_encoding': 'utf8'})
 
+# MariaDB-Engine
 @pytest.fixture
 def db_engine_2() -> Engine:
     return create_engine(f'mariadb+pymysql://{ev.MARIADB_USERNAME}:{urllib.parse.quote_plus(ev.MARIADB_PASSWORD)}@{ev.MARIADB_SERVERNAME}:{ev.MARIADB_PORTNUMBER}/MariaTest?charset=utf8mb4')
 
+# Engine mit vom Aufbau her gültiger URL für SQLite, das bisher nicht unterstützt wird
 @pytest.fixture
 def fail_engine() -> Engine:
     return create_engine(f'sqlite:///C:/Benutzer/inexistent_database.db')
 
+# TableMetaData-Objekt für die PostgreSQL-Tabelle Vorlesung_Datenbanken_SS2024
 @pytest.fixture
 def pg_table_meta_data_1(db_engine_1: Engine) -> TableMetaData:
     table_name = 'Vorlesung_Datenbanken_SS2024'
@@ -31,6 +37,7 @@ def pg_table_meta_data_1(db_engine_1: Engine) -> TableMetaData:
     row_count = get_row_count_from_engine(db_engine_1, table_name)
     return TableMetaData(db_engine_1, table_name, primary_keys, data_type_info, row_count)
 
+# TableMetaData-Objekt für die PostgreSQL-Tabelle Uebung_Datenbanken_SS2024
 @pytest.fixture
 def pg_table_meta_data_2(db_engine_1: Engine) -> TableMetaData:
     table_name = 'Uebung_Datenbanken_SS2024'
@@ -39,6 +46,7 @@ def pg_table_meta_data_2(db_engine_1: Engine) -> TableMetaData:
     row_count = get_row_count_from_engine(db_engine_1, table_name)
     return TableMetaData(db_engine_1, table_name, primary_keys, data_type_info, row_count)
 
+# TableMetaData-Objekt für die MariaDB-Tabelle Vorlesung_Datenbanken_SS2024
 @pytest.fixture
 def md_table_meta_data_1(db_engine_2: Engine) -> TableMetaData:
     table_name = 'Vorlesung_Datenbanken_SS2024'
@@ -47,6 +55,7 @@ def md_table_meta_data_1(db_engine_2: Engine) -> TableMetaData:
     row_count = get_row_count_from_engine(db_engine_2, table_name)
     return TableMetaData(db_engine_2, table_name, primary_keys, data_type_info, row_count)
 
+# TableMetaData-Objekt für die MariaDB-Tabelle Uebung_Datenbanken_SS2024
 @pytest.fixture
 def md_table_meta_data_2(db_engine_2: Engine) -> TableMetaData:
     table_name = 'Uebung_Datenbanken_SS2024'
@@ -55,6 +64,7 @@ def md_table_meta_data_2(db_engine_2: Engine) -> TableMetaData:
     row_count = get_row_count_from_engine(db_engine_2, table_name)
     return TableMetaData(db_engine_2, table_name, primary_keys, data_type_info, row_count)
 
+# TableMetaData-Objekt mit ungültigen Werten zum Testen der Fehlerausgaben
 @pytest.fixture
 def fail_meta_data(fail_engine: Engine) -> TableMetaData:
     table_name = 'Uebung_Datenbanken_SS2024'
@@ -63,79 +73,120 @@ def fail_meta_data(fail_engine: Engine) -> TableMetaData:
     row_count = 23
     return TableMetaData(fail_engine, table_name, primary_keys, data_type_info, row_count)
 
+##### TESTS #####
 
+### Funktionen zum Verbinden zweier Tabellen mit gleichem Dialekt
 
+# Test der Funktion zum Verbinden zweier Tabellen mit gleichem Dialekt in der gleichen Datenbank (PostgreSQL) oder mindestens auf demselben Server (MariaDB)
 def test_join_tables_of_same_dialect(pg_table_meta_data_1: TableMetaData, pg_table_meta_data_2: TableMetaData) -> None:
     meta_data = [pg_table_meta_data_1, pg_table_meta_data_2]
+    # Join-Attribute
     attributes_to_join_on = ['Matrikelnummer', 'Matrikelnummer']
+    # Attribute, deren Werte in der Auswahl enthalten sein sollen
     select_1 = ['Matrikelnummer', 'Vorname', 'Nachname']
     select_2 = ['Punktzahl']
+    # Abfrage des Joins, der Attributnamen und der Anzahl der nicht zuzuordnenden Tupel je Tabelle
     table_result, column_names, unmatched_rows = join_tables_of_same_dialect_on_same_server(meta_data, attributes_to_join_on, select_1, select_2)
+    # Abfrage des Outer Joins für dieselben Attribute
     full_outer_join = join_tables_of_same_dialect_on_same_server(meta_data, attributes_to_join_on, select_1, select_2, full_outer_join = True)[0]
+    # Sicherstellung, dass alle Ausgaben den erwarteten Datentyp haben
     assert type(table_result) == list
     assert type(column_names) == list
     assert type(unmatched_rows) == list
+    assert type(full_outer_join) == list
+    # Sicherstellung, dass die Anzahl Tupel im Full Outer Join der Summe der Tupel im Inner Join und der nicht zuzuordnenden Tupel entspricht, 
+    # d. h. kein Tupel doppelt gelistet/gezählt wurde
     assert len(full_outer_join) == len(table_result) + unmatched_rows[0] + unmatched_rows[1]
-    assert len(table_result[0]) == 4
+    # Sicherstellung, dass die Anzahl der abgefragten Werte im Ergebnis mit der Anzahl der für die Abfrage angegebenen Attribute übereinstimmt
+    assert len(table_result[0]) == len(select_1) + len(select_2)
 
+# Test der Funktion für den Join von Tabellen mit gleichem SQL-Dialekt, wenn das Join-Attribut der zweiten Tabelle in der Attributliste der 
+# zweiten Tabelle enthalten ist
 def test_join_tables_of_same_dialect_with_join_attribute_in_sec_list(pg_table_meta_data_1: TableMetaData, pg_table_meta_data_2: TableMetaData) -> None:
     meta_data = [pg_table_meta_data_1, pg_table_meta_data_2]
+    # Join-Attribute
     attributes_to_join_on = ['Matrikelnummer', 'Matrikelnummer']
+    # Attribute, deren Werte in der Auswahl enthalten sein sollen
     select_1 = ['Matrikelnummer', 'Vorname', 'Nachname']
     select_2 = ['Matrikelnummer']
+    # Abfrage des Joins, der Attributnamen und der Anzahl der nicht zuzuordnenden Tupel je Tabelle
     table_result, column_names, unmatched_rows = join_tables_of_same_dialect_on_same_server(meta_data, attributes_to_join_on, select_1, select_2)
+    # Abfrage des Outer Joins für dieselben Attribute
     full_outer_join = join_tables_of_same_dialect_on_same_server(meta_data, attributes_to_join_on, select_1, select_2, full_outer_join = True)[0]
+    # Sicherstellung, dass alle Ausgaben den erwarteten Datentyp haben
+    assert type(table_result) == list
+    assert type(column_names) == list
+    assert type(unmatched_rows) == list
+    assert type(full_outer_join) == list
+    # Sicherstellung, dass die Anzahl Tupel im Full Outer Join der Summe der Tupel im Inner Join und der nicht zuzuordnenden Tupel entspricht, 
+    # d. h. kein Tupel doppelt gelistet/gezählt wurde
     assert len(full_outer_join) == len(table_result) + unmatched_rows[0] + unmatched_rows[1]
-    assert len(table_result[0]) == 4
+    # Sicherstellung, dass die Anzahl der abgefragten Werte im Ergebnis mit der Anzahl der für die Abfrage angegebenen Attribute übereinstimmt
+    assert len(table_result[0]) == len(select_1) + len(select_2)
 
+# Test der Funktion für den Join von Tabellen mit gleichem SQL-Dialekt, wenn die Liste der auszuwählenden Attribute aus der ersten Tabelle leer ist
 def test_join_tables_of_same_dialect_no_first_attributes(pg_table_meta_data_1: TableMetaData, pg_table_meta_data_2: TableMetaData, capsys: pytest.CaptureFixture[str]) -> None:
     meta_data = [pg_table_meta_data_1, pg_table_meta_data_2]
+    # Join-Attribute
     attributes_to_join_on = ['Matrikelnummer', 'Matrikelnummer']
+    # Attribute, deren Werte in der Auswahl enthalten sein sollen
     select_1 = []
     select_2 = ['Matrikelnummer', 'Punktzahl']
+    # Abfrage des Inner Joins, der Attributnamen und der Anzahl der nicht zuzuordnenden Tupel je Tabelle
     table_result, column_names, unmatched_rows = join_tables_of_same_dialect_on_same_server(meta_data, attributes_to_join_on, select_1, select_2)
+    # Abfrage des Outer Joins für dieselben Attribute
     full_outer_join = join_tables_of_same_dialect_on_same_server(meta_data, attributes_to_join_on, select_1, select_2, full_outer_join = True)[0]
+    # Sicherstellung, dass die Anzahl Tupel im Full Outer Join der Summe der Tupel im Inner Join und der nicht zuzuordnenden Tupel entspricht, 
+    # d. h. kein Tupel doppelt gelistet/gezählt wurde
     assert len(full_outer_join) == len(table_result) + unmatched_rows[0] + unmatched_rows[1]
-    assert len(table_result[0]) == 2
+    # Sicherstellung, dass die Anzahl der abgefragten Werte im Ergebnis mit der Anzahl der für die Abfrage angegebenen Attribute übereinstimmt
+    assert len(table_result[0]) == len(select_1) + len(select_2)
+
 
 def test_join_tables_of_same_dialect_no_second_attributes(pg_table_meta_data_1: TableMetaData, pg_table_meta_data_2: TableMetaData) -> None:
     meta_data = [pg_table_meta_data_1, pg_table_meta_data_2]
+    # Join-Attribute
     attributes_to_join_on = ['Matrikelnummer', 'Matrikelnummer']
+    # Attribute, deren Werte in der Auswahl enthalten sein sollen
     select_1 = ['Matrikelnummer', 'Vorname', 'Nachname']
     select_2 = []
+    # Abfrage des Inner Joins, der Attributnamen und der Anzahl der nicht zuzuordnenden Tupel je Tabelle
     table_result, column_names, unmatched_rows = join_tables_of_same_dialect_on_same_server(meta_data, attributes_to_join_on, select_1, select_2)
+    # Abfrage des Outer Joins für dieselben Attribute
     full_outer_join = join_tables_of_same_dialect_on_same_server(meta_data, attributes_to_join_on, select_1, select_2, full_outer_join = True)[0]
+    # Sicherstellung, dass die Anzahl Tupel im Full Outer Join der Summe der Tupel im Inner Join und der nicht zuzuordnenden Tupel entspricht, 
+    # d. h. kein Tupel doppelt gelistet/gezählt wurde
     assert len(full_outer_join) == len(table_result) + unmatched_rows[0] + unmatched_rows[1]
 
 
+### Tests für den Join von Tabellen, die nicht in derselben Anweisung abgefragt werden können ###
+
+# Test der Funktion zum Verbinden zweier Tabellen mit gleichem Dialekt in min. verschiedenen Datenbanken (PostgreSQL) oder auf verschiedenen Servern (MariaDB) 
+# sowie für Tabellen mit verschiedenen SQL-Dialekten
 def test_join_tables_of_different_dialects(pg_table_meta_data_2: TableMetaData, md_table_meta_data_1: TableMetaData) -> None:
     meta_data = [pg_table_meta_data_2, md_table_meta_data_1]
+    # Join-Attribute
     attributes_to_join_on = ['Matrikelnummer', 'Matrikelnummer']
+    # Attribute, deren Werte in der Auswahl enthalten sein sollen
     select_1 = ['Punktzahl', 'zugelassen']
     select_2 = ['Matrikelnummer']
+    # Abfrage des Inner Joins, der Attributnamen und der Anzahl der nicht zuzuordnenden Tupel je Tabelle
     table_result, column_names, unmatched_rows = join_tables_of_different_dialects_dbs_or_servers(meta_data, attributes_to_join_on, select_1, select_2)
+    # Abfrage des Outer Joins für dieselben Attribute
     full_outer_join = join_tables_of_different_dialects_dbs_or_servers(meta_data, attributes_to_join_on, select_1, select_2, full_outer_join = True)[0]
+    # Sicherstellung, dass die Anzahl Tupel im Full Outer Join der Summe der Tupel im Inner Join und der nicht zuzuordnenden Tupel entspricht, 
+    # d. h. kein Tupel doppelt gelistet/gezählt wurde
     assert len(full_outer_join) == len(table_result) + unmatched_rows[0] + unmatched_rows[1]
+    # Sicherstellung, dass in jedem Tupel des Inner-Join-Ergebnisses ...
     for line in table_result:
+        # ... so viele Werte enthalten sind wie Attribute zur Auswahl angegeben wurden
         assert len(line) == len(select_1) + len(select_2)
+        # ... die Datentypen der Werte den Attributen entsprechen: int für Matrikelnummer und Punktzahl, bool für zugelassen
         assert type(line[0]) == int
         assert type(line[1]) == bool
         assert type(line[2]) == int
+    # Sicherstellung, dass das Abfrageergebnis die erwartete Form hat
     assert table_result == [[0, False, 1869972], [15, False, 1912967], [200, True, 1938205], [25, False, 1972793], [120, False, 2021596], [100, False, 2076750], [54, False, 2120434], [75, False, 2192140], [200, True, 2256812], [210, True, 2261095], [168, False, 2262911], [150, False, 2302766], [210, True, 2320350], [175, True, 2453099], [63, False, 2454294], [97, False, 2507172], [167, True, 2510983], [233, True, 2643692], [75, False, 2695599], [75, False, 2703748], [85, False, 2752103], [0, False, 2814068], [200, True, 2834378], [100, False, 2838526], [132, False, 2885172], [128, False, 2929136], [80, False, 2985690], [65, False, 3078691], [142, False, 3609446], [200, True, 3763593], [175, True, 5181568]]
-
-# Test der Funktion, die die Attributsübertragung simuliert und die Abfrage erstellt, mit der die Operation ausgeführt werden kann
-def test_merge(pg_table_meta_data_1: TableMetaData, md_table_meta_data_2: TableMetaData) -> None:
-    target_table_name = convert_string_if_contains_capitals_or_spaces(pg_table_meta_data_1.table_name, pg_table_meta_data_1.engine.dialect.name)
-    merge_result, merge_query, merge_params = simulate_merge_and_build_query(pg_table_meta_data_1, md_table_meta_data_2, ['Matrikelnummer', 'Matrikelnummer'], 'Punktzahl')
-    # Die an erster Stelle ausgegebene Tabelle entspricht der vollen Tabelle. Da bei der Attributsübertragung keine neuen Tupel eingefügt werden,
-    # sollte dieses Ergebnis genauso viele Tupel enthalten wie die unbearbeitete Tabelle.
-    assert len(convert_result_to_list_of_lists(merge_result)) == pg_table_meta_data_1.total_row_count
-    # Sicherstellung, dass die Abfrage die korrekte Form hat
-    assert merge_query == 'ALTER TABLE "Vorlesung_Datenbanken_SS2024" ADD COLUMN "Punktzahl" integer; UPDATE "Vorlesung_Datenbanken_SS2024" SET "Punktzahl" = CASE WHEN "Matrikelnummer" = 1869972 THEN :value_1 WHEN "Matrikelnummer" = 1912967 THEN :value_2 WHEN "Matrikelnummer" = 1938205 THEN :value_3 WHEN "Matrikelnummer" = 1972793 THEN :value_4 WHEN "Matrikelnummer" = 2021596 THEN :value_5 WHEN "Matrikelnummer" = 2076750 THEN :value_6 WHEN "Matrikelnummer" = 2120434 THEN :value_7 WHEN "Matrikelnummer" = 2192140 THEN :value_8 WHEN "Matrikelnummer" = 2256812 THEN :value_9 WHEN "Matrikelnummer" = 2261095 THEN :value_10 WHEN "Matrikelnummer" = 2262911 THEN :value_11 WHEN "Matrikelnummer" = 2302766 THEN :value_12 WHEN "Matrikelnummer" = 2320350 THEN :value_13 WHEN "Matrikelnummer" = 2453099 THEN :value_14 WHEN "Matrikelnummer" = 2454294 THEN :value_15 WHEN "Matrikelnummer" = 2507172 THEN :value_16 WHEN "Matrikelnummer" = 2510983 THEN :value_17 WHEN "Matrikelnummer" = 2643692 THEN :value_18 WHEN "Matrikelnummer" = 2695599 THEN :value_19 WHEN "Matrikelnummer" = 2703748 THEN :value_20 WHEN "Matrikelnummer" = 2752103 THEN :value_21 WHEN "Matrikelnummer" = 2814068 THEN :value_22 WHEN "Matrikelnummer" = 2834378 THEN :value_23 WHEN "Matrikelnummer" = 2838526 THEN :value_24 WHEN "Matrikelnummer" = 2885172 THEN :value_25 WHEN "Matrikelnummer" = 2929136 THEN :value_26 WHEN "Matrikelnummer" = 2985690 THEN :value_27 WHEN "Matrikelnummer" = 3078691 THEN :value_28 WHEN "Matrikelnummer" = 3609446 THEN :value_29 WHEN "Matrikelnummer" = 3763593 THEN :value_30 WHEN "Matrikelnummer" = 5181568 THEN :value_31 END;'
-    # Sicherstellung, dass alle benötigten Parameter im Parameter-Dictionary enthalten sind
-    assert merge_params == {'value_1': 0, 'value_2': 15, 'value_3': 200, 'value_4': 25, 'value_5': 120, 'value_6': 100, 'value_7': 54, 'value_8': 75, 'value_9': 200, 'value_10': 210, 'value_11': 168, 'value_12': 150, 'value_13': 210, 'value_14': 175, 'value_15': 63, 'value_16': 97, 'value_17': 167, 'value_18': 233, 'value_19': 75, 'value_20': 75, 'value_21': 85, 'value_22': 0, 'value_23': 200, 'value_24': 100, 'value_25': 132, 'value_26': 128, 'value_27': 80, 'value_28': 65, 'value_29': 142, 'value_30': 200, 'value_31': 175}
-    # Abschließendes Entfernen des neuen Attributs, um die anderen Tests nicht zu beeinflussen
-    execute_sql_query(pg_table_meta_data_1.engine, text(f'ALTER TABLE {target_table_name} DROP COLUMN IF EXISTS "Punktzahl"'), commit = True)
 
 # Test der Funktion zum Erzwingen von Typkonversionen bei Joins zwischen verschiedenen Dialekten bzw. Tabellen, die nicht in einer gemeinsamen 
 # Abfrage miteinander verbunden werden können
@@ -167,6 +218,27 @@ def test_force_cast_and_match_exceptions() -> None:
         # Fehler wegen eines falschen Wertes für cast_direction (nicht 1 oder 2)
         force_cast_and_match('integer', 'text', [255, '255'], 3)
 
+
+### Test der Funktion für die Simulation der Übertragung
+
+# Test der Funktion, die die Attributsübertragung simuliert und die Abfrage erstellt, mit der die Operation ausgeführt werden kann
+def test_merge(pg_table_meta_data_1: TableMetaData, md_table_meta_data_2: TableMetaData) -> None:
+    target_table_name = convert_string_if_contains_capitals_or_spaces(pg_table_meta_data_1.table_name, pg_table_meta_data_1.engine.dialect.name)
+    merge_result, merge_query, merge_params = simulate_merge_and_build_query(pg_table_meta_data_1, md_table_meta_data_2, ['Matrikelnummer', 'Matrikelnummer'], 'Punktzahl')
+    # Die an erster Stelle ausgegebene Tabelle entspricht der vollen Tabelle. Da bei der Attributsübertragung keine neuen Tupel eingefügt werden,
+    # sollte dieses Ergebnis genauso viele Tupel enthalten wie die unbearbeitete Tabelle.
+    assert len(convert_result_to_list_of_lists(merge_result)) == pg_table_meta_data_1.total_row_count
+    # Sicherstellung, dass die Abfrage die korrekte Form hat
+    assert merge_query == 'ALTER TABLE "Vorlesung_Datenbanken_SS2024" ADD COLUMN "Punktzahl" integer; UPDATE "Vorlesung_Datenbanken_SS2024" SET "Punktzahl" = CASE WHEN "Matrikelnummer" = 1869972 THEN :value_1 WHEN "Matrikelnummer" = 1912967 THEN :value_2 WHEN "Matrikelnummer" = 1938205 THEN :value_3 WHEN "Matrikelnummer" = 1972793 THEN :value_4 WHEN "Matrikelnummer" = 2021596 THEN :value_5 WHEN "Matrikelnummer" = 2076750 THEN :value_6 WHEN "Matrikelnummer" = 2120434 THEN :value_7 WHEN "Matrikelnummer" = 2192140 THEN :value_8 WHEN "Matrikelnummer" = 2256812 THEN :value_9 WHEN "Matrikelnummer" = 2261095 THEN :value_10 WHEN "Matrikelnummer" = 2262911 THEN :value_11 WHEN "Matrikelnummer" = 2302766 THEN :value_12 WHEN "Matrikelnummer" = 2320350 THEN :value_13 WHEN "Matrikelnummer" = 2453099 THEN :value_14 WHEN "Matrikelnummer" = 2454294 THEN :value_15 WHEN "Matrikelnummer" = 2507172 THEN :value_16 WHEN "Matrikelnummer" = 2510983 THEN :value_17 WHEN "Matrikelnummer" = 2643692 THEN :value_18 WHEN "Matrikelnummer" = 2695599 THEN :value_19 WHEN "Matrikelnummer" = 2703748 THEN :value_20 WHEN "Matrikelnummer" = 2752103 THEN :value_21 WHEN "Matrikelnummer" = 2814068 THEN :value_22 WHEN "Matrikelnummer" = 2834378 THEN :value_23 WHEN "Matrikelnummer" = 2838526 THEN :value_24 WHEN "Matrikelnummer" = 2885172 THEN :value_25 WHEN "Matrikelnummer" = 2929136 THEN :value_26 WHEN "Matrikelnummer" = 2985690 THEN :value_27 WHEN "Matrikelnummer" = 3078691 THEN :value_28 WHEN "Matrikelnummer" = 3609446 THEN :value_29 WHEN "Matrikelnummer" = 3763593 THEN :value_30 WHEN "Matrikelnummer" = 5181568 THEN :value_31 END;'
+    # Sicherstellung, dass alle benötigten Parameter im Parameter-Dictionary enthalten sind
+    assert merge_params == {'value_1': 0, 'value_2': 15, 'value_3': 200, 'value_4': 25, 'value_5': 120, 'value_6': 100, 'value_7': 54, 'value_8': 75, 'value_9': 200, 'value_10': 210, 'value_11': 168, 'value_12': 150, 'value_13': 210, 'value_14': 175, 'value_15': 63, 'value_16': 97, 'value_17': 167, 'value_18': 233, 'value_19': 75, 'value_20': 75, 'value_21': 85, 'value_22': 0, 'value_23': 200, 'value_24': 100, 'value_25': 132, 'value_26': 128, 'value_27': 80, 'value_28': 65, 'value_29': 142, 'value_30': 200, 'value_31': 175}
+    # Abschließendes Entfernen des neuen Attributs, um die anderen Tests nicht zu beeinflussen
+    execute_sql_query(pg_table_meta_data_1.engine, text(f'ALTER TABLE {target_table_name} DROP COLUMN IF EXISTS "Punktzahl"'), commit = True)
+
+
+### Test der Hilfsfunktionen ###
+
+# Test der Funktion für den Aufbau der SQL-Anweisung zum Hinzufügen eines neuen Attributs zu einer bestehenden Tabelle
 def test_build_query_to_add_column(pg_table_meta_data_1: TableMetaData, md_table_meta_data_2: TableMetaData) -> None:
     pg_table_name = convert_string_if_contains_capitals_or_spaces(pg_table_meta_data_1.table_name, pg_table_meta_data_1.engine.dialect.name)
     md_table_name = convert_string_if_contains_capitals_or_spaces(md_table_meta_data_2.table_name, md_table_meta_data_2.engine.dialect.name)
@@ -213,6 +285,7 @@ def test_build_query_to_add_column(pg_table_meta_data_1: TableMetaData, md_table
 
 # Kein Test für execute_merge_and_add_constraints, weil darin nur bereits getestete Funktionen aufgerufen werden
 
+# Test der Funktion für den Aufbau der SQL-Anweisung zum Übertragen von CHECK- und NOT-NULL-Constraints zwischen Quell- und Zielattribut 
 def test_add_constraints_to_new_attribute(pg_table_meta_data_1: TableMetaData, md_table_meta_data_2: TableMetaData) -> None:
     target_table_name = convert_string_if_contains_capitals_or_spaces(pg_table_meta_data_1.table_name, pg_table_meta_data_1.engine.dialect.name)
     # Hinzufügen des neuen Attributs ohne Constraints
@@ -224,11 +297,14 @@ def test_add_constraints_to_new_attribute(pg_table_meta_data_1: TableMetaData, m
     # Abschließendes Entfernen des neuen Attributs, um die anderen Tests nicht zu beeinflussen
     execute_sql_query(pg_table_meta_data_1.engine, text(f'ALTER TABLE {target_table_name} DROP COLUMN IF EXISTS "Punktzahl"'), commit = True)
 
+# Test der Funktion zur Erstellung des Ausdrucks für die Erstellung des Zielattributs in MariaDB (wird für das Hinzufügen von Constraints benötigt)
 def test_get_full_column_definition_for_mariadb(md_table_meta_data_1: TableMetaData) -> None:
+    # Beziehen des Ausdrucks
     column_def = get_full_column_definition_for_mariadb(md_table_meta_data_1, 'Matrikelnummer')
+    # Überprüfung, ob der Ausdruck die erwartete Form hat
     assert column_def == '"Matrikelnummer" int(11) NOT NULL CHECK ("Matrikelnummer" between 1000000 and 9999999)'
 
-
+# Test, ob bei der Ausdruckserstellung für das Zielattribut in MariaDB die erwarteten Exceptions auftreten
 def test_get_full_column_definition_for_mariadb_exceptions(md_table_meta_data_1: TableMetaData, pg_table_meta_data_1: TableMetaData) -> None:
     # Ausgabe eines ArgumentErrors, da die MariaDB-Tabelle Vorlesung_Datenbanken_SS2024 kein Attribut 'zugelassen' aufweist
     with pytest.raises(ArgumentError):
@@ -237,12 +313,41 @@ def test_get_full_column_definition_for_mariadb_exceptions(md_table_meta_data_1:
     with pytest.raises(DialectError):
         get_full_column_definition_for_mariadb(pg_table_meta_data_1, 'Matrikelnummer')
 
-
+# Test der Funktion zum Auflisten der angegebenen Attribute in einem String
 def test_list_attributes_to_select() -> None:
-    ls = list_attributes_to_select(['studierende', 'vorname', 'nachname'], 'mariadb')
-    assert type(ls) == str
-    assert ls == ', '.join(['studierende', 'vorname', 'nachname'])
+    # Beispiel einer Auflistung ohne Trennzeichen für MariaDB
+    md_list_1 = list_attributes_to_select(['studierende', 'vorname', 'nachname'], 'mariadb')
+    # MariaDB-Beispiel, das aufgrund des Leerzeichens im zweiten Attribut mit Trennzeichen versehen werden muss
+    md_list_2 = list_attributes_to_select(['Studierende', 'vorige Punktzahl'], 'mariadb')
+    # MariaDB-Beispiel mit Tabellenname
+    md_list_3 = list_attributes_to_select(['Matrikelnummer', 'zugelassen'], 'mariadb', 'Uebung_Datenbanken')
+    # PostgreSQL-Beispiel, das aufgrund der Großbuchstaben mit Trennzeichen versehen werden muss
+    pg_list_1 = list_attributes_to_select(['Matrikelnummer', 'Vorname'], 'postgresql')
+    # PostgreSQL-Beispiel, das aufgrund des Leerzeichens im ersten Attribut mit Trennzeichen versehen werden muss
+    pg_list_2 = list_attributes_to_select(['vorige Punktzahl', 'zugelassen'], 'postgresql')
+    # PostgreSQL-Beispiel mit Tabellen- und Datenbankname
+    pg_list_3 = list_attributes_to_select(['Matrikelnummer', 'zugelassen'], 'postgresql', 'Uebung_Datenbanken', 'Test')
 
+    # Sicherstellung, dass alle Beispiel vom Typ String sind
+    examples = [md_list_1, md_list_2, md_list_3, pg_list_1, pg_list_2, pg_list_3]
+    for item in examples:
+        assert type(item) == str
+    
+    # Sicherstellung der korrekten Formatierung ...
+    # ... ohne Trennzeichen
+    assert md_list_1 == 'studierende, vorname, nachname'
+    # ... mit Trennzeichen um das zweite Attribut
+    assert md_list_2 == 'Studierende, "vorige Punktzahl"'
+    # ... ohne Trennzeichen
+    assert md_list_3 == 'Uebung_Datenbanken.Matrikelnummer, Uebung_Datenbanken.zugelassen'
+    # ... mit Trennzeichen um beide Attribute
+    assert pg_list_1 == '"Matrikelnummer", "Vorname"'
+    # ... mit Trennzeichen um das erste Attribut
+    assert pg_list_2 == '"vorige Punktzahl", zugelassen'
+    # ... mit Trennzeichen um den Datenbanknamen, den Tabellennamen und das erste Attribut
+    assert pg_list_3 == '"Test"."Uebung_Datenbanken"."Matrikelnummer", "Test"."Uebung_Datenbanken".zugelassen'
+
+# Test, ob das Dictionary für die grobe Kompatiblitätsprüfung vor Ausführung von Operationen auf zwei Tabellen wie erwartet erstellt wird
 def test_check_basic_data_type_compatibility(fail_engine: Engine) -> None:
     meta_data_1 = TableMetaData(fail_engine, 'inexistent_table', ['id'], {'id': {'data_type_group': 'integer', 'data_type': 'integer', 'is_unique': True}, 'comment': {'data_type_group': 'text', 'data_type': 'text', 'is_unique': False}}, 34)
     meta_data_2 = TableMetaData(fail_engine, 'inexistent_table_2', ['id'], {'id': {'data_type_group': 'integer', 'data_type': 'integer', 'is_unique': True}, 'points': {'data_type_group': 'decimal', 'data_type': 'decimal', 'is_unique': False}, 'comment': {'data_type_group': 'text', 'data_type': 'text', 'is_unique': False}}, 11)
