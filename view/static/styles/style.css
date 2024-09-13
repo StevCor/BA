@@ -47,7 +47,7 @@ form {
 /**** Darstellung der Formularelemente ****/
 
 
-form label {
+.colored {
     display: flex;
     justify-content: center;
     align-items: center;

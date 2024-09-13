@@ -12,7 +12,7 @@
     leeren Strings wird der gesuchte String gelöscht.
     <div class="groups">
         <div class="item">
-            <label for="column-to-search">Spalte auswählen:</label>
+            <label class="colored" for="column-to-search">Spalte auswählen:</label>
             <select name="column-to-search" id="column-to-search" required>
                 <option value="all">Alle Spalten</option>
                 {% for column in table_columns %}
@@ -21,11 +21,11 @@
             </select>
         </div>
         <div class="item">
-            <label for="search-string">Suchen:</label>
+            <label class="colored" for="search-string">Suchen:</label>
             <input type="text" id="searchstring" name="searchstring" minlength="2">
         </div>
         <div class="item">
-            <label for="replacement">Ersetzen durch:</label>
+            <label class="colored" for="replacement">Ersetzen durch:</label>
             <input type="text" id="replacement" name="replacement">
         </div>
         <input type="hidden" id="engine-no" name="engine-no" value="{{ engine_no }}">

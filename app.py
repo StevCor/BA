@@ -1,13 +1,14 @@
 from flask import Flask, render_template, request, flash, redirect, session, url_for
 import os
 import re
+from sqlalchemy import create_engine
 from waitress import serve
 from ControllerClasses import TableMetaData
 from controllerFunctions import check_validity_of_input_and_searched_value, show_both_tables_separately, update_TableMetaData_entries
 from model.SQLDatabaseError import DatabaseError, DialectError
 from model.loginModel import register_new_user, login_user 
 from model.databaseModel import get_data_type_meta_data, connect_to_db, convert_result_to_list_of_lists, get_primary_key_from_engine, get_row_count_from_engine, list_all_tables_in_db_with_preview, get_full_table_ordered_by_primary_key
-from model.oneTableModel import get_replacement_information, get_row_number_of_affected_entries, get_unique_values_for_attribute, replace_all_string_occurrences, replace_some_string_occurrences, search_string, update_to_unify_entries
+from model.oneTableModel import get_indexes_of_affected_attributes_for_replacing, get_replacement_information, get_row_number_of_affected_entries, get_unique_values_for_attribute, replace_all_string_occurrences, replace_some_string_occurrences, search_string, update_to_unify_entries
 from model.twoTablesModel import check_basic_data_type_compatibility, execute_merge_and_add_constraints, join_tables_of_different_dialects_dbs_or_servers, join_tables_of_same_dialect_on_same_server, simulate_merge_and_build_query
 
 # globale Variablen für den Datenbankzugriff
@@ -1087,6 +1088,22 @@ def logout():
 
 # Ausführung des Programms/Starten des Servers
 if __name__ == '__main__':
+
+    maria_engine = create_engine(f'mariadb+pymysql://root:arc-en-ciel@localhost:3306/MariaTest?charset=utf8mb4')
+    postgres_engine = create_engine(f'postgresql://postgres:arc-en-ciel@localhost:5432/PostgresTest1', connect_args = {'client_encoding': 'utf8'})
+    table_name = 'Vorlesung_Datenbanken_SS2023'
+    primary_keys = get_primary_key_from_engine(maria_engine, table_name)
+    data_type_info = get_data_type_meta_data(maria_engine, table_name)
+    row_count = get_row_count_from_engine(maria_engine, table_name)
+    md_table_meta_data_1  = TableMetaData(maria_engine, table_name, primary_keys, data_type_info, row_count)
+    primary_keys = get_primary_key_from_engine(postgres_engine, table_name)
+    data_type_info = get_data_type_meta_data(postgres_engine, table_name)
+    row_count = get_row_count_from_engine(postgres_engine, table_name)
+    pg_table_meta_data_1 = TableMetaData(postgres_engine, table_name, primary_keys, data_type_info, row_count)
+
+    yo  = get_replacement_information(md_table_meta_data_1, [('Matrikelnummer', 0), ('Vorname', 1), ('Nachname', 0), ('zugelassen', 0), ('Note', 0)], 'an', 'AHN')[1]
+    print(yo)
+
     # Festlegen des geheimen Schlüssels für die Web-App (aktuell ohne spezifische Funktion, wird jedoch empfohlen)
     app.secret_key = os.urandom(12)
     # Start des Servers auf dem lokalen Rechner unter Portnummer 8000

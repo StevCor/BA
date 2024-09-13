@@ -28,6 +28,10 @@ class TableMetaData:
     
     def get_data_type_group(self, column_name:str):
         """Rückgabe der Datentypgruppe des eingegebenen Attributes; None, falls dieses nicht enthalten ist."""
+        # Wenn der abgefragte Attributname bereits wegen Großschreibung oder enthaltener Leerzeichen mit doppelten Anführungszeichen umgeben ist,
+        # werden diese für die Abfrage der Datentypgruppe entfernt.
+        if column_name.startswith('"') and column_name.endswith('"'):
+            column_name = column_name[1:-1]
         if column_name in self.data_type_info.keys():
             return self.data_type_info[column_name]['data_type_group']
         else:
