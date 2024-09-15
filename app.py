@@ -1,14 +1,13 @@
 from flask import Flask, render_template, request, flash, redirect, session, url_for
 import os
 import re
-from sqlalchemy import create_engine
 from waitress import serve
 from ControllerClasses import TableMetaData
 from controllerFunctions import check_validity_of_input_and_searched_value, show_both_tables_separately, update_TableMetaData_entries
 from model.SQLDatabaseError import DatabaseError, DialectError
 from model.loginModel import register_new_user, login_user 
 from model.databaseModel import get_data_type_meta_data, connect_to_db, convert_result_to_list_of_lists, get_primary_key_from_engine, get_row_count_from_engine, list_all_tables_in_db_with_preview, get_full_table_ordered_by_primary_key
-from model.oneTableModel import get_indexes_of_affected_attributes_for_replacing, get_replacement_information, get_row_number_of_affected_entries, get_unique_values_for_attribute, replace_all_string_occurrences, replace_some_string_occurrences, search_string, update_to_unify_entries
+from model.oneTableModel import get_replacement_information, get_row_number_of_affected_entries, get_unique_values_for_attribute, replace_all_string_occurrences, replace_some_string_occurrences, search_string, update_to_unify_entries
 from model.twoTablesModel import check_basic_data_type_compatibility, execute_merge_and_add_constraints, join_tables_of_different_dialects_dbs_or_servers, join_tables_of_same_dialect_on_same_server, simulate_merge_and_build_query
 
 # globale Variablen für den Datenbankzugriff
@@ -98,12 +97,14 @@ def show_db_login_page(engine_no):
     elif request.method == 'GET':
         # Wenn schon eine Anmeldung an einer Datenbank erfolgt ist, ...
         if engine_no == 2:
-            # ... wird deren SQL-Dialekt 'aufgehübscht'
+            # ... wird deren SQL-Dialekt 'aufgehübscht', ...
             if engine_1.dialect.name == 'mariadb':
                 sql_dialect = 'MariaDB'
             elif engine_1.dialect.name == 'postgresql':
                 sql_dialect = 'PostgreSQL'
-            # ... und eine Benachrichtigung darüber ausgegeben, welche Tabelle bei der vorangegangenen Meldung ausgewählt wurde.
+            # ... alte Nachrichten, deren Anzeige nicht nötig ist, werden gelöscht ...
+            session['_flashes'].clear()
+            # ... und es wird eine Benachrichtigung darüber ausgegeben, welche Tabelle bei der vorangegangenen Meldung ausgewählt wurde.
             flash(f'Tabelle {meta_data_table_1.table_name} der Datenbank {engine_1.url.database} ({sql_dialect}) ausgewählt.')
         # Anzeige des Datenbankformulars. engine_1 wird benötigt, um bei der Anmeldung an der zweiten Datenbank die zuvor eingegebenen Daten für
         # die erste Anmeldung (Benutzername, Server, Portnummer etc.) im linken Anmeldeformular anzeigen zu können.
@@ -126,6 +127,8 @@ def set_up_db_connection():
             host = request.form['host-name1']
             port = request.form['port-number1']
             db_encoding = request.form['encoding1']
+            # Nummer der zu belegenden Engine
+            engine_no = 1
         # Für den Button 'db-two' entsprechend die Daten aus den Eingabefeldern des rechten Formulars.
         elif 'db-two' in request.form.keys():
             db_name = request.form['db-name2']
@@ -135,9 +138,8 @@ def set_up_db_connection():
             host = request.form['host-name2']
             port = request.form['port-number2']
             db_encoding = request.form['encoding2']
-        # Anschließend wird die (versteckt übermittelte) Ziffer der zu belegenden bezogen, hieraus in folgenden Schritten ableiten zu können, 
-        # welche Seite angezeigt werden soll.
-        engine_no = int(request.form['engine-no'])
+            # Nummer der zu belegenden Engine
+            engine_no = 2
 
         ### Aufbau der Datenbankverbindung ###
         global engine_1
@@ -327,7 +329,7 @@ def search_entries():
             # Anderenfalls wird die Suche nach dem String per SQL-Abfrage in der Datenbank ausgeführt.
             data = search_string(meta_data_table_1, string_to_search, column_names)
     # Anzeige der Seite mit der Suchfunktion
-    return render_template('search.html', user_name = user_name, db_name = db_name, table_name = table_name, searched_string = string_to_search, table_columns = table_columns, data = data)
+    return render_template('search.html', user_name = user_name, db_name = db_name, table_name = table_name, string_to_search = searched_string, table_columns = table_columns, data = data)
 
 ### Routen für die Funktion 'Suchen und Ersetzen' ###
 
@@ -520,15 +522,16 @@ def unify_db_entries():
         return redirect(url_for('start'))
     # Beziehen des Anwendungsbenutzernamens
     user_name = session['username']
+    ### Beziehen der für die Anzeige der Startseite der Vereinheitlichungsfunktion benötigten Tabellenmetadaten ###
+    db_name = engine_1.url.database
+    table_name = meta_data_table_1.table_name
+    table_columns = meta_data_table_1.columns
+    primary_keys = meta_data_table_1.primary_keys
     if request.method == 'GET':
         data = get_full_table_ordered_by_primary_key(meta_data_table_1)
     elif request.method == 'POST':
-        ### Beziehen der für die Anzeige der Startseite der Vereinheitlichungsfunktion benötigten Tabellenmetadaten ###
-        db_name = engine_1.url.database
-        table_name = meta_data_table_1.table_name
-        table_columns = meta_data_table_1.columns
-        primary_keys = meta_data_table_1.primary_keys
-        # Anlegen der Nachricht, die auf der als Nächsts geladenen Seite der App ausgegeben wird
+        
+        # Anlegen der Nachricht, die auf der als Nächstes geladenen Seite der App ausgegeben wird
         message = ''
         # Beziehen des für die Vereinheitlichung ausgewählten Attributs aus dem Request
         attribute_to_change = request.form['column-to-unify']
@@ -849,6 +852,7 @@ def merge_tables():
             # Auch das Kompatibilitäts-Dictionary wird aktualisiert, da es sich verändert haben könnte.
             compatibility_by_code = check_basic_data_type_compatibility(meta_data_table_1, meta_data_table_2)
             # Zuletzt wird auch bei Erfolg eine Meldung ausgegeben ...
+            flash('Die Attributübertragung war erfolgreich.')
             flash(message) 
             ### ... und die globalen Variablen für die Übertragung werden zurückgesetzt. ###
             source_attribute = None
@@ -1063,8 +1067,7 @@ def logout():
         return redirect(url_for('start'))
     elif request.method == 'GET':
         # Daten der Session entfernen, um den Nutzer auszuloggen
-        session.pop('loggedin', None)
-        session.pop('username', None)
+        session.clear()
         # Engines, Hilfsvariablen und Tabellenmetadaten zurücksetzen
         global engine_1
         global engine_2
@@ -1088,22 +1091,6 @@ def logout():
 
 # Ausführung des Programms/Starten des Servers
 if __name__ == '__main__':
-
-    maria_engine = create_engine(f'mariadb+pymysql://root:arc-en-ciel@localhost:3306/MariaTest?charset=utf8mb4')
-    postgres_engine = create_engine(f'postgresql://postgres:arc-en-ciel@localhost:5432/PostgresTest1', connect_args = {'client_encoding': 'utf8'})
-    table_name = 'Vorlesung_Datenbanken_SS2023'
-    primary_keys = get_primary_key_from_engine(maria_engine, table_name)
-    data_type_info = get_data_type_meta_data(maria_engine, table_name)
-    row_count = get_row_count_from_engine(maria_engine, table_name)
-    md_table_meta_data_1  = TableMetaData(maria_engine, table_name, primary_keys, data_type_info, row_count)
-    primary_keys = get_primary_key_from_engine(postgres_engine, table_name)
-    data_type_info = get_data_type_meta_data(postgres_engine, table_name)
-    row_count = get_row_count_from_engine(postgres_engine, table_name)
-    pg_table_meta_data_1 = TableMetaData(postgres_engine, table_name, primary_keys, data_type_info, row_count)
-
-    yo  = get_replacement_information(md_table_meta_data_1, [('Matrikelnummer', 0), ('Vorname', 1), ('Nachname', 0), ('zugelassen', 0), ('Note', 0)], 'an', 'AHN')[1]
-    print(yo)
-
     # Festlegen des geheimen Schlüssels für die Web-App (aktuell ohne spezifische Funktion, wird jedoch empfohlen)
     app.secret_key = os.urandom(12)
     # Start des Servers auf dem lokalen Rechner unter Portnummer 8000
