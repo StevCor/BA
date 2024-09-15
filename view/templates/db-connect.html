@@ -1,10 +1,12 @@
+<!-- Seite für das Datenbankanmeldeformular -->
 <!DOCTYPE html>
 <html lang="de">
 
 <head>
-    <title>SQL-Datenbanken</title>
+    <title>SQL-Datenbanken: Datenbankanmeldung</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Link zur verwendeten CSS-Datei -->
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/connect.css') }}">
 </head>
 
@@ -12,16 +14,25 @@
     <div class="connect">
         <h1>Willkommen, {{user_name}}!</h1>
         <h2>Sie können mit bis zu zwei Datenbanken arbeiten.</h2>
+
+        <!-- Anzeige der mit flash() übermittelten Nachrichten -->
         {% include 'message.html' %}
+
+        <!-- Container, der die beiden Datenbankanmeldeformulare enthält -->
         <div class="db-forms">
+            <!-- Formular für die Anmeldung an der ersten Datenbank, alle Angaben sind erforderlich -->
             <form id=first-db action="/connect-to-db" method="POST">
                 <h2 id="header-first">Bitte geben Sie folgende Daten für die erste Datenbank ein:</h2>
-
+                <!-- Anordnung der Input-Elemente und ihrer Label jeweils in einer eigenen Zeile (gilt für alle Input-Elemente) -->
                 <div class="row">
+                    <!-- Das Label steht in einem eigenen Container mit einer in Relation zum Parent-Container fixen Breite -->
                     <div class="col-25">
                         <label for="db-name1">Datenbank:</label>
                     </div>
+                    <!-- Das Input-Element nimmt den Rest der Breite des Parent-Containers ein -->
                     <div class="col-75">
+                        <!-- Texteingabefeld für den Namen der ersten Datenbank. Ist gerade das Formular für die zweite Datenbank aktiv, steht
+                        hier der Name der zuerst ausgewählten Datenbank -->
                         <input type="text" id="db-name1" placeholder="Datenbankname" name="db-name1" {% if engine_no==2
                             %} value="{{ engine_1.url.database}}" {% endif %} required>
                     </div>
@@ -31,14 +42,14 @@
                         <label for="db-dialect1">SQL-Dialekt:</label>
                     </div>
                     <div class="col-75">
-
+                        <!-- Dropdown-Menü für die Auswahl des Dialekts der ersten Datenbank. Ist gerade das Formular für die zweite Datenbank
+                        aktiv, steht hier der Dialekt der zuerst ausgewählten Datenbank  -->
                         <select class="db-dialect" name="db-dialect1" id="db-dialect1" required>
                             <option value="mariadb" {% if engine_no==2 and engine_1.dialect.name=='mariadb' %} selected
                                 {% endif %}>MariaDB</option>
                             <option value="postgresql" {% if engine_no==2 and engine_1.dialect.name=='postgresql' %}
                                 selected {% endif %}>PostgreSQL</option>
                         </select>
-
                     </div>
                 </div>
                 <div class="row">
@@ -46,6 +57,8 @@
                         <label for="user-name1">Benutzername:</label>
                     </div>
                     <div class="col-75">
+                        <!-- Texteingabefeld für den Benutzernamen, über den die Anmeldung an der ersten Datenbank erfolgt. Ist gerade das 
+                        Formular für die zweite Datenbank aktiv, steht hier der Benutzername der zuerst ausgewählten Datenbank  -->
                         <input type="text" name="user-name1" placeholder="Datenbankbenutzername" id="user-name1" {% if
                             engine_no==2 %} value="{{ engine_1.url.username }}" {% endif %} required>
                     </div>
@@ -55,6 +68,8 @@
                         <label for="password1">Passwort:</label>
                     </div>
                     <div class="col-75">
+                        <!-- Eingabefeld für das Passwort der ersten Datenbank. Wird ebenfalls (mit Punkten) ausgefüllt, wenn das 
+                        Anmeldeformular für die zweite Datenbank aktiv ist -->
                         <input type="password" name="password1" placeholder="Datenbankpasswort" id="password1" {% if
                             engine_no==2 %} value="{{ engine_1.url.password }}" {% endif %} required>
                     </div>
@@ -64,6 +79,9 @@
                         <label for="host-name1">Hostname:</label>
                     </div>
                     <div class="col-75">
+                        <!-- Dropdown-Menü für die Auswahl des Servers, auf dem die erste Datenbank liegt. Da aktuell nur Datenbanken auf
+                        dem lokalen Rechner verwendet werden können, erfolgt hier keine Anpassung bei Auswahl des zweiten Datenbankanmelde-
+                        formulars -->
                         <select name="host-name1" id="host-name1" required>
                             <option value="localhost">localhost</option>
                         </select>
@@ -74,6 +92,8 @@
                         <label for="port-number1">Portnummer:</label>
                     </div>
                     <div class="col-75">
+                        <!-- Zahleneingabefeld für die Portnummer, unter der der Server der ersten Datenbank erreichbar ist. Wird bei der 
+                        Dialektauswahl auf den Standardwert des jeweiligen Dialekts angepasst, kann aber verändert werden -->
                         <input type="number" class="port-number" name="port-number1" id="port-number1" value="3306"
                             required>
 
@@ -84,19 +104,20 @@
                         <label for="encoding1">Zeichencodierung:</label>
                     </div>
                     <div class="col-75">
+                        <!-- Dropdown-Menü für die Auswahl der Zeichencodierung der ersten Datenbank -->
                         <select name="encoding1" id="encoding1" required>
                             <option value="utf8">UTF8</option>
                             <option value="latin1">ISO 8859-1 bzw. Latin-1</option>
                         </select>
                     </div>
                 </div>
-
-                <input type="hidden" id="engine-no" name="engine-no" value=1>
+                <!-- Absende-Button für die Anmeldung an der ersten Datenbank -->
                 <div class="buttons">
                     <input type="submit" id="db-one" name="db-one" value="Mit dieser Datenbank verbinden">
                 </div>
             </form>
 
+            <!-- Formular für die Anmeldung an der zweiten Datenbank, alle Angaben sind erforderlich -->
             <form id=second-db action="/connect-to-db" method="POST">
                 <h2 id="header-second">Bitte geben Sie folgende Daten für die zweite Datenbank ein:
                 </h2>
@@ -105,6 +126,7 @@
                         <label for="db-name2">Datenbank:</label>
                     </div>
                     <div class="col-75">
+                        <!-- Texteingabefeld für den Namen der zweiten Datenbank -->
                         <input type="text" id="db-name2" placeholder="Datenbankname" name="db-name2" required>
                     </div>
                 </div>
@@ -113,6 +135,7 @@
                         <label for="db-dialect2">SQL-Dialekt:</label>
                     </div>
                     <div class="col-75">
+                        <!-- Dropdown-Menü für den SQL-Dialekt der zweiten Datenbank -->
                         <select class="db-dialect" name="db-dialect2" id="db-dialect2" required>
                             <option value="mariadb">MariaDB</option>
                             <option value="postgresql">PostgreSQL</option>
@@ -125,6 +148,7 @@
                         <label for="user-name2">Benutzername:</label>
                     </div>
                     <div class="col-75">
+                        <!-- Texteingabefeld für den Benutzernamen, über den die Anmeldung an der zweiten Datenbank erfolgt -->
                         <input type="text" name="user-name2" placeholder="Datenbankbenutzername" id="user-name2"
                             required>
                     </div>
@@ -134,6 +158,7 @@
                         <label for="password2">Passwort:</label>
                     </div>
                     <div class="col-75">
+                        <!-- Eingabefeld für das Passwort der zweiten Datenbank -->
                         <input type="password" name="password2" placeholder="Datenbankpasswort" id="password2" required>
                     </div>
                 </div>
@@ -142,6 +167,7 @@
                         <label for="host-name2">Hostname:</label>
                     </div>
                     <div class="col-75">
+                        <!-- Dropdown-Menü für die Auswahl des Servers, auf dem die zweite Datenbank liegt -->
                         <select name="host-name2" id="host-name2" required>
                             <option value="localhost">localhost</option>
                         </select>
@@ -152,6 +178,8 @@
                         <label for="port-number2">Portnummer:</label>
                     </div>
                     <div class="col-75">
+                        <!-- Zahleneingabefeld für die Portnummer, unter der der Server der zweiten Datenbank erreichbar ist. Wird bei der 
+                        Dialektauswahl auf den Standardwert des jeweiligen Dialekts angepasst, kann aber verändert werden -->
                         <input type="number" class="port-number" name="port-number2" value="3306" id="port-number2"
                             required>
                     </div>
@@ -161,15 +189,14 @@
                         <label for="encoding2">Zeichencodierung:</label>
                     </div>
                     <div class="col-75">
+                        <!-- Dropdown-Menü für die Auswahl der Zeichencodierung der zweiten Datenbank -->
                         <select name="encoding2" id="encoding2" required>
                             <option value="utf8">UTF8</option>
                             <option value="latin1">ISO 8859-1 bzw. Latin-1</option>
                         </select>
                     </div>
                 </div>
-
-                <input type="hidden" id="engine-no" name="engine-no" value=2>
-
+                <!-- Button für die Anmeldung an der zweiten Datenbank -->
                 <div class="buttons">
                     <input type="submit" name="db-two" id="db-two" value="Mit dieser Datenbank verbinden">
                 </div>
@@ -177,65 +204,66 @@
         </div>
     </div>
     <script>
-        //function disableUnusedForm() {*/
+        /* Deaktivieren des aktuell nicht benötigten Datenbankanmeldeformulars */
+        // von Python übermittelte Engine-Nummer zur Identifizierung, welches Formular deaktiviert werden soll
         const engineNo = "{{ engine_no | int }}";
+        // zu deaktivierendes Anmeldeformular
         let form;
+        // Überschrift des zu deaktivierenden Formulars
         let headline;
+        // Absende-Button des zu deaktivierenden Formulars
         let submitButton;
+        /* Wenn gerade die Anmeldung an der ersten Datenbank erfolgen soll, werden die Elemente des zweiten Formulars ausgewählt. */
         if (engineNo == 1) {
             form = document.getElementById("second-db");
             headline = document.getElementById("header-second");
             submitButton = document.getElementById("db-two");
+            /* Wenn gerade die Anmeldung an der zweiten Datenbank erfolgen soll, werden die Elemente des ersten Formulars ausgewählt. */
         } else if (engineNo == 2) {
             form = document.getElementById("first-db");
             headline = document.getElementById("header-first");
             submitButton = document.getElementById("db-one");
         }
+
+        // Deaktivieren des Absende-Buttons
+        submitButton.disabled = true;
+        // graue Färbung des Absende-Buttons zur Verdeutlichung, dass er deaktiviert ist
+        submitButton.style.backgroundColor = "lightGray";
+        // graue Färbung der Formularüberschrift zur Verdeutlichung, dass das Formular deaktiviert ist
         headline.style.color = "lightGray";
+        // Input-Elemente des zu deaktivierenden Formulars
         let elements = form.elements;
         for (let i = 0, len = elements.length; i < len; ++i) {
+            // Deaktivieren jedes Elements
             elements[i].disabled = true;
+            // graue Färbung der zugehörigen Label (d. h. jeweils eines)
             if (elements[i].labels != null) {
-                for (label of elements[i].labels) {
+                for (let label of elements[i].labels) {
                     label.style.backgroundColor = "lightGray";
                 }
             }
 
         }
-        submitButton.disabled = true;
-        //}
-        /*var form = document.getElementById("second-db");
-        var elements = form.elements;
-        for (var i = 0, len = elements.length; i < len; ++i) {
-            elements[i].disabled = true;
-            for (label of elements[i].labels) {
-                label.style.backgroundColor = "lightGray";
-            }
-        }
-        document.getElementById("header-second").style.color = "lightGray";
-        const submitButton2 = document.getElementById('db-two');
-        submitButton2.disabled = true;*/
-        // disableUnusedForm();
 
-        // Anpassung des Standardwertes für die Portnummer basierend auf der Dialektauswahl 
+        /* Anpassung des Standardwertes für die Portnummer basierend auf der Dialektauswahl */
+        // beide Datenbankanmeldeformulare
         const forms = document.querySelectorAll('form');
-        console.log(forms);
         forms.forEach((form) => {
+            // Dropdown-Menü zur Dialektauswahl
             const dialectSelect = form.querySelector('.db-dialect');
+            // Zahleneingabefeld für die Portnummer
             const portNumberInput = form.querySelector('.port-number');
-            console.log(dialectSelect);
-            console.log(portNumberInput);
+            // Hinzufügen eines EventListeners zum Dialektauswahlmenü
             dialectSelect.addEventListener('change', (event) => {
+                // Wenn der Dialekt MariaDB ausgewählt wird, wird die Portnummer auf den MariaDB-Standardwert 3306 gesetzt.
                 if (event.target.value === 'mariadb') {
                     portNumberInput.value = 3306;
+                    // Wenn der Dialekt PostgreSQL ausgewählt wird, wird die Portnummer auf den PostgreSQL-Standardwert 5432 gesetzt.
                 } else if (event.target.value == 'postgresql') {
                     portNumberInput.value = 5432;
-                } else {
-                    console.log(event.target.value);
                 }
             });
         });
-
     </script>
 </body>
 

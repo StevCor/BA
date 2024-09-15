@@ -120,7 +120,7 @@ def check_validity_of_input_and_searched_value(table_meta_data:TableMetaData, in
             return f'Der eingegebene Wert \'{input}\' verletzt eine Constraint des Attributs {column_name}.\n'
         # Bei anderen Fehlern wird die Meldung zusätzlich zu dem Hinweis auf einen Datenbankfehler ausgegeben.
         else:
-            return f'Bei der Abfrage des Attributs {column_name} ist ein Datenbankfehler aufgetreten: {str(error)}.\n'
+            return f'{str(error)}\n'
     else:
         # Ohne Fehler wird der Wert 0 zurückgegeben.
         return check_result

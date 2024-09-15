@@ -1,16 +1,19 @@
+<!-- Vorlage für HTML-Seiten für die Vorschau von Operationen auf einer Tabelle -->
 <!DOCTYPE html>
 <html lang="de">
 
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>SQL-Datenbanken{% block title %}
+    <title>SQL-Datenbanken{% block title %}{# Platzhalter für eventuelle Zusätze für den Seitentitel #}
         {% endblock title %}</title>
+    <!-- Link zur verwendeten CSS-Datei -->
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
 
 </head>
 
 <body>
+    <!-- Header mit den Informationen über die aktuelle(n) Datenbankverbindung(en) und Logout-Buttons -->
     <nav class="navtop">
         <div>
             <h1>Willkommen, {{user_name}}!</h1>
@@ -22,33 +25,42 @@
             </div>
         </div>
     </nav>
+
+    <!-- Navigationsleiste mit den Links zu den Seiten für die Operationen auf einer Tabelle -->
     <div class="links">
         <button id="back">Zurück</button>
+        <!-- In die Jinja-Blöcke hinter den Links kann class="active" eingetragen werden, um den jeweiligen Link optisch als aktiv hervorzuheben -->
         <a href="{{ url_for('search_entries') }}" {% block search_active %} {% endblock search_active %}>Suchen</a>
         <a href="{{ url_for('search_and_replace_entries') }}" {% block replace_active %} {% endblock %}>Suchen und
             Ersetzen</a>
         <a href="{{ url_for('unify_db_entries') }}" {% block unify_active %} {% endblock unify_active
             %}>Vereinheitlichen</a>
     </div>
+    <!-- Jinja-Block für die Darstellung der jeweiligen Vorschau -->
     {% block preview_content %}
     {% endblock preview_content %}
 
+    <!-- Darstellung der Nachrichten, die mittels flash() übergeben wurden -->
     {% include "message.html" %}
 
+    <!-- JavaScript für die Funktion zur Abfrage einer Bestätigung bei Klick auf den Zurück-Button -->
     <script src="{{url_for('static', filename='confirmBack.js')}}"></script>
     <script>
-
+        // Setzen des EventListeners zur Abfrage einer Bestätigung bei Klick auf den Zurück-Button
         const backButton = document.getElementById('back')
         backButton.addEventListener('click', function () {
             confirmBack();
         });
 
+        // EventListener für den Abmeldebutton für die Datenbankverbindung(en)
         let disconnectButton = document.getElementById('disconnect');
         disconnectButton.addEventListener('click', function () {
             return confirm('Sind Sie sicher, dass Sie die Datenbankverbindung trennen wollen? Sie kehren dann zur Anmeldeseite zurück.');
         });
 
     </script>
+
+    <!-- Platzhalter für ggf. benötigte weitere JavaScript-Blöcke -->
     {% block more_js %}
     {% endblock more_js %}
 </body>

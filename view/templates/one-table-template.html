@@ -1,18 +1,21 @@
+<!-- Vorlage für die Startseiten der Operationen auf einer Tabelle (keine Vorschau) -->
 <!DOCTYPE html>
 <html lang="de">
 
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>SQL-Datenbanken{% block title %}
+    <title>SQL-Datenbanken{% block title %}{# Platzhalter für eventuelle Zusätze für den Seitentitel #}
         {% endblock title %}</title>
-    <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
+    <!-- Link zur CSS-Datei für die Grid.js-Tabelle -->
+    <link rel="stylesheet" href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css">
+    <!-- Link zur CSS-Datei für die eigenen Elemente -->
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
 
 </head>
 
 <body>
-    <input type="hidden" id="database-name" value="{{ db_name }}">
+    <!-- Header mit den Informationen über die aktuelle(n) Datenbankverbindung(en) und Logout-Buttons -->
     <nav class="navtop">
         <div>
             <h1>Willkommen, {{user_name}}!</h1>
@@ -25,8 +28,9 @@
         </div>
     </nav>
 
-
+    <!-- Navigationsleiste mit den Links zu den Seiten für die Operationen auf einer Tabelle -->
     <div class="links">
+        <!-- In die Jinja-Blöcke hinter den Links kann class="active" eingetragen werden, um den jeweiligen Link optisch als aktiv hervorzuheben -->
         <button id="back">Zurück</button>
         <a href="{{ url_for('search_entries') }}" {% block search_active %} {% endblock search_active %}>Suchen</a>
         <a href="{{ url_for('search_and_replace_entries') }}" {% block replace_active %} {% endblock %}>Suchen und
@@ -34,31 +38,48 @@
         <a href="{{ url_for('unify_db_entries') }}" {% block unify_active %} {% endblock unify_active
             %}>Vereinheitlichen</a>
     </div>
+
+    <!-- Jinja-Block für die Darstellung des operationsspezifischen Seitenkörpers -->
     {% block one_table_form %}
     {% endblock one_table_form %}
+
+    <!-- Container für die Darstellung der aktuell ausgewählten Tabelle -->
     <div id="table"></div>
 
+    <!-- Darstellung der Nachrichten, die mittels flash() übergeben wurden -->
     {% include "message.html" %}
 
+    <!-- JavaScript für die allgemeine Darstellung der Grid.js-Tabelle -->
     <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+
+    <!-- JavaScript mit der Funktion für die app-spezifische Anzeige der Grid.js-Tabelle (z. B. Beschriftungen der Tabellenelemente) -->
     <script src="{{url_for('static', filename='showTable.js')}}"></script>
+
+    <!-- JavaScript für die Funktion zur Abfrage einer Bestätigung bei Klick auf einen Zurück-Button -->
     <script src="{{url_for('static', filename='confirmBack.js')}}"></script>
+
     <script>
+        // Umwandlung der mit Python übergebenen darzustellenden Attributnamen und Tabellendaten in JavaScript-Arrays
         var columns = {{ table_columns | tojson | safe }};
         var data = {{ data | tojson | safe }};
+        // Darstellung der Tabelle
         showTable(columns, data, 'table');
 
+        // EventListener für die Trennung der Datenbankverbindung bei Klick auf den entsprechenden Button 
         const disconnectButton = document.getElementById('disconnect');
         disconnectButton.addEventListener('click', function () {
             return confirm('Sind Sie sicher, dass Sie die Datenbankverbindung trennen wollen? Sie kehren dann zur Anmeldeseite zurück.');
         });
 
+        // EventListener zur Abfrage einer Bestätigung bei Klick auf den Zurück-Button
         const backButton = document.getElementById('back')
         backButton.addEventListener('click', function () {
             confirmBack();
         });
 
     </script>
+
+    <!-- Platzhalter für ggf. benötigte weitere JavaScript-Blöcke -->
     {% block more_js %}
     {% endblock more_js %}
 </body>

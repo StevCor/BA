@@ -1,83 +1,163 @@
+<!-- Nutzen der Vorlage für die Startseiten der Operationen auf zwei Tabellen -->
+{% extends "two-tables-template.html"%}
+
+<!-- Anpassung des Seitentitels, je nach ausgewähltem Modus -->
 {% block title %}: {% if mode == 'compare' %}Vergleichen {% elif mode == 'merge' %}Attribut übertragen{% endif %}
 {% endblock title %}
 
-{% if mode == 'compare'%} {% block compare_active %}
+<!-- Aktivierung der Links für die Vereinheitlichungsfunktion bzw. die Attributübertragungsfunktion, je nach ausgewähltem Modus -->
+{% block compare_active %}
+{% if mode == 'compare'%}
 class="active"
-{% endblock compare_active %}
-{% elif mode == 'merge'%} {% block merge_active%}
-class="active"
-{% endblock merge_active%}
+{% elif mode == 'merge'%}
+<!-- leer für merge -->
 {% endif %}
+{% endblock compare_active %}
 
+{% block merge_active%}
+{% if mode == 'compare'%}
+<!-- leer für compare -->
+{% elif mode == 'merge'%}
+class="active"
+{% endif %}
+{% endblock merge_active%}
+
+<!-- Anpassung des Endpunkts des HTML-Formulars, je nach ausgewähltem Modus -->
 {% block form_action %}
 {% if mode == 'compare'%} action="/compare"
 {% elif mode == 'merge'%} action="/merge-preview"
 {% endif %}
 {% endblock form_action %}
 
-{% block additional_params %}
+{% block full_outer_join %}
 {% if mode == 'compare' %}
+<!-- Option, für den Vergleich einen Full Outer Join zu verwenden -->
 <label for="full-outer-join">Full Outer Join durchführen:</label>
 <input type="checkbox" id="full-outer-join" name="full-outer-join">
+{% else %}
+<!-- leer für merge -->
+{% endif %}
+{% endblock full_outer_join %}
+
+<!-- Ergänzung der Input-Elemente für die operationsspezifischen Parameter -->
+{% block additional_params %}
+<!-- Input-Elemente für die Vergleichsfunktion -->
+{% if mode == 'compare' %}
+<!-- Auswahl der Attribute, die im Vergleichsergebnis angezeigt werden sollen -->
 <h4>Attribute, die für den Vergleich beibehalten werden sollen:</h4>
 Tabelle {{ table_name_1}}:
-<input type="checkbox" name="table1-all" id="table1-all" value="table1-all" checked>
-<label for="table1-all">Alle auswählen</label>
-{% for column in table_columns_1 %}
-<input type="checkbox" class="table1-box" name="columns-table1" id="{{ column }}" value="{{ column }}" checked>
-<label for="{{ column }}">{{ column }}</label>
-{% endfor %}<br>
-Tabelle {{ table_name_2}}:
-<input type="checkbox" name="table2-all" id="table2-all" value="table2-all" checked>
-<label for="table1-all">Alle auswählen</label>
-{% for column in table_columns_2 %}
-<input type="checkbox" class="table2-box" name="columns-table2" id="{{ column }}" value="{{ column }}" checked>
-<label for="{{ column }}">{{ column }}</label>
-{% endfor %}<br>
-<input type="submit" value="Tabellen vergleichen">
+<!-- Bündelung der Checkboxen für die Auswahl der Attribute der ersten Tabelle und ihrer Labels, damit sie hintereinander stehen -->
+<div class="groups">
+    <!-- Gruppierung der Checkbox mit ihrem Label -->
+    <div class="item">
+        <!-- Checkbox für die Auswahl aller Attribute der ersten Tabelle -->
+        <input type="checkbox" name="table1-all" id="table1-all" value="table1-all" checked>
+        <label for="table1-all">Alle auswählen</label>
+    </div>
+    {% for column in table_columns_1 %}
+    <!-- Gruppierung der Checkbox mit ihrem jeweiligen Label -->
+    <div class="item">
+        <!-- Eine Checkbox je Tabellenattribut, identifiziert über seinen Namen -->
+        <input type="checkbox" class="table1-box" name="columns-table1" id="{{ column }}" value="{{ column }}" checked>
+        <label for="{{ column }}">{{ column }}</label>
+    </div>
+    {% endfor %}<br>
+</div>
+<!-- Bündelung der Checkboxen für die Auswahl der Attribute der zweiten Tabelle und ihrer Labels sowie des Absende-Buttons,
+damit sie hintereinander stehen -->
+<div class="groups">
+    Tabelle {{ table_name_2}}:
+    <!-- Gruppierung der Checkbox mit ihrem Label -->
+    <div class="item">
+        <!-- Checkbox für die Auswahl aller Attribute der zweiten Tabelle -->
+        <input type="checkbox" name="table2-all" id="table2-all" value="table2-all" checked>
+        <label for="table1-all">Alle auswählen</label>
+    </div>
+    {% for column in table_columns_2 %}
+    <!-- Gruppierung der Checkbox mit ihrem jeweiligen Label -->
+    <div class="item">
+        <!-- Eine Checkbox je Tabellenattribut, identifiziert über seinen Namen -->
+        <input type="checkbox" class="table2-box" name="columns-table2" id="{{ column }}" value="{{ column }}" checked>
+        <label for="{{ column }}">{{ column }}</label>
+    </div>
+    {% endfor %}<br>
+    <!-- Absende-Button des Formulars -->
+    <div class="item">
+        <input type="submit" value="Tabellen vergleichen">
+    </div>
+</div>
 
+<!-- Input-Elemente für die Attributübertragungsfunktion -->
 {% elif mode == 'merge' %}
-<label for="target-column">Mit den neuen Werten auszufüllende Spalte der Zieltabelle
-    (optional):</label>
-<select id="target-column" name="target-column">
-    <option value="" name="Bitte auswählen:"></option>
-</select>
-<label for="source-column-to-insert">Zu übertragendes Attribut:</label>
-<select name="source-column-to-insert" id="source-column-to-insert" required></select>
-<label for="new-attribute-name">Neuer Name für das übertragene Attribut (nur, wenn keine Zielspalte
-    ausgewählt wurde):</label>
-<input type="text" id="new-attribute-name" name="new-attribute-name" pattern="^[-\w]{4,}$">
-<input type="submit" value="Vorschau">
+<!-- Bündelung der Input-Elemente für die Operationsausführung und ihrer Labels, damit sie hintereinander stehen -->
+<div class="groups">
+    <!-- Gruppierung des Dropdown-Menüs mit seinem Label -->
+    <div class="item">
+        <!-- Auswahl eines bestehenden Attributs der Zieltabelle, in das die neuen Werte eingetragen werden sollen.
+        Wird hier nichts ausgewählt, wird der Zieltabelle ein neues Attribut hinzugefügt. -->
+        <label class="colored" for="target-column">Eintragen in bestehende Spalte (optional):</label>
+        <!-- Das Dropdown-Menü wird mit JavaScript gefüllt -->
+        <select id="target-column" name="target-column">
+            <option value="" name="Bitte auswählen:"></option>
+        </select>
+    </div>
+    <!-- Gruppierung des Dropdown-Menüs mit seinem Label -->
+    <div class="item">
+        <!-- Auswahl des zu übertragenden Attributs -->
+        <label class="colored" for="source-column-to-insert">Zu übertragendes Attribut:</label>
+        <!-- Das Dropdown-Menü wird mit JavaScript gefüllt -->
+        <select name="source-column-to-insert" id="source-column-to-insert" required></select>
+    </div>
+    <!-- Gruppierung des Texteingabefeldes für den neuen Spaltennamen mit seinem Label -->
+    <div class="item">
+        <!-- Es kann nur ein neuer Name angegeben werden, wenn für die Attributübertragung kein schon existierendes Attribut als Ziel ausgewählt wurde -->
+        <label class="colored" for="new-attribute-name">Name für neues Attribut der Zieltabelle (wenn keine Zielspalte
+            ausgewählt):</label>
+        <input type="text" id="new-attribute-name" name="new-attribute-name" pattern="^[-\w]{4,}$">
+    </div>
+    <!-- Absende-Button des Formulars -->
+    <div class="item">
+        <input type="submit" value="Vorschau">
+    </div>
+</div>
 {% endif %}
 {% endblock additional_params %}
 
+<!-- Erweiterung des JavaScript-Blocks der Vorlage -->
 {% block more_js %}
 <script>
+    // JavaScript für die Vergleichsfunktion
     {% if mode == 'compare' %}
-
+    // Hinzufügen des EventListeners für die An-/Abwahl aller Attribute der ersten Tabelle bei An-/Abwahl der Checkbox hierfür
     document.getElementById('table1-all').addEventListener('change', function () {
         unSelectAll(this, '.table1-box');
     });
+    // Hinzufügen des EventListeners für die An-/Abwahl aller Attribute der zweiten Tabelle bei An-/Abwahl der Checkbox hierfür
     document.getElementById('table2-all').addEventListener('change', function () {
         unSelectAll(this, '.table2-box');
     });
 
-
+    // Alle Attributs-Checkboxen (außer jener für die Auswahl aller Checkboxen) für die erste Tabelle
     let checkboxes1 = document.querySelectorAll('.table1-box');
+    // Alle Attributs-Checkboxen (außer jener für die Auswahl aller Checkboxen) für die zweite Tabelle
     let checkboxes2 = document.querySelectorAll('.table2-box');
-    console.log(checkboxes1);
 
+    // Hinzufügen eines EventListeners zu jeder dieser Checkboxen der ersten Tabelle, damit die 'all'-Checkbox bei Aktivierung der letzten
+    // Attributs-Checkbox ebenfalls aktiviert wird bzw. abgewählt wird, wenn nicht mehr alle Attributs-Checkboxen aktiv sind
     for (var i = 0; i < checkboxes1.length; i++) {
         checkboxes1[i].addEventListener('change', function () {
             updateBoxToCheckAll('table1-box', 'table1-all');
         });
     }
+    // Hinzufügen eines EventListeners zu jeder dieser Checkboxen der zweiten Tabelle, damit die 'all'-Checkbox bei Aktivierung der letzten
+    // Attributs-Checkbox ebenfalls aktiviert wird bzw. abgewählt wird, wenn nicht mehr alle Attributs-Checkboxen aktiv sind
     for (var j = 0; j < checkboxes2.length; j++) {
         checkboxes2[j].addEventListener('change', function () {
             updateBoxToCheckAll('table2-box', 'table2-all');
         });
     }
 
+    // Funktion für die An-/Abwahl von über einen Klassennamen identifizierten Checkboxen entsprechend dem Zustand der Quell-Checkbox
     function unSelectAll(source, className) {
         var checkboxes = document.querySelectorAll(className);
         for (var i = 0; i < checkboxes.length; i++) {
@@ -85,76 +165,108 @@ Tabelle {{ table_name_2}}:
         }
     }
 
+    // Funktion für die Anwahl der 'all'-Checkbox, wenn alle verbundenen Attributs-Checkboxen aktiv sind, bzw. die Abwahl der 'all'-Checkbox,
+    // wenn min. eine der Attributs-Checkboxen nicht aktiv ist
     function updateBoxToCheckAll(className, checkAllId) {
+        // Attributs-Checkboxen, die mit der jeweiligen 'all'-Checkbox verbunden sind
         const checkboxes = document.getElementsByClassName(className);
-        console.log(checkboxes);
+        // Zähler für die aktivierten Attributs-Checkboxen
         let counter = 0;
+        // die 'all'-Checkbox
         let boxToCheckAll = document.getElementById(checkAllId);
 
+        // Zählung der aktivierten Attributs-Checkboxen
         for (let i = 0; i < checkboxes.length; i++) {
             if (checkboxes[i].checked) {
                 counter++;
             }
         }
-        console.log(counter)
+        // Wenn alle Attributs-Checkboxen aktiv sind, wird auch die 'all'-Checkbox aktiviert
         if (counter == checkboxes.length) {
             boxToCheckAll.checked = true;
+            // Wenn min. eine Attributs-Checkbox abgewählt ist, wird auch die 'all'-Checkbox abgewählt
         } else if (counter < checkboxes.length) {
             boxToCheckAll.checked = false;
         }
     }
 
+    // JavaScript für die Attributübertragungsfunktion
     {% elif mode == 'merge' %}
+    // Dropdown-Menü für die Zieltabellenauswahl
     const selectedTargetTable = document.getElementById('target-table');
+    // Attributnamen der als Erstes in der App ausgewählten Tabelle
     const columnsTable1 = {{ table_columns_1 | tojson | safe }};
+    // Attributnamen der als Zweites in der App ausgewählten Tabelle
     const columnsTable2 = {{ table_columns_2 | tojson | safe }};
 
+    // Attribute der als Erstes in der App ausgewählten Tabelle, die keine Primärschlüssel sind
     const columnsWithoutPKs1 = {{ no_pk_columns_1 | tojson | safe }};
+    // Attribute der als Zweites in der App ausgewählten Tabelle, die keine Primärschlüssel sind
     const columnsWithoutPKs2 = {{ no_pk_columns_2 | tojson | safe }};
+    // Initiales Eintragen der auswählbaren Attribute in die Dropdown-Menüs für das Ziel- und das Quellattribut der Übertragung
     fillAttributeDropDowns('source-column-to-insert', 'target-column', columnsTable1, columnsTable2, columnsWithoutPKs1, columnsWithoutPKs2);
+    // Hinzufügen eines EventListeners zum Dropdown-Menü für die Zieltabelle, damit die Ziel- und die Quellattributauswahl angepasst wird
     selectedTargetTable.addEventListener('change', function () {
         fillAttributeDropDowns('source-column-to-insert', 'target-column', columnsTable1, columnsTable2, columnsWithoutPKs1, columnsWithoutPKs2);
     });
 
+    // Funktion zum Füllen der Dropdown-Menüs für die Auswahl des Ziel- und des Quellattributs
+    // 1 im Namen eines Parameters bedeutet, dass er der als Erstes in der App ausgewählten Tabelle zugeordnet ist;
+    // 2 bedeutet entsprechend, dass der Parameter der als Erstes in der App ausgewählten Tabelle zugeordnet ist.
     function fillAttributeDropDowns(sourceSelectItemId, targetSelectItemId, options1, options2, noPKs1, noPKs2) {
+        // Dropdown-Menü für die Quellattributauswahl
         let sourceSelect = document.getElementById(sourceSelectItemId);
+        // Dropdown-Menü für die Zielattributauswahl
         let targetSelect = document.getElementById(targetSelectItemId);
+        // Zieltabelle (table_1 oder table_2)
         const targetTable = document.getElementById('target-table').value;
 
         let targetColumnsToChooseFrom;
         let sourceColumnsToChooseFrom;
-        console.log(targetTable)
+        // Wenn die in der App als Erstes angewählte Tabelle als Ziel ausgewählt wurde, ...
         if (targetTable == 'table_1') {
+            // ... können die Attribute der als Zweites ausgewählten Tabelle als Quellattribut dienen.
             sourceColumnsToChooseFrom = options2;
+            // ... können die Attribute der als Erstes ausgewählten Tabelle als Zielattribut dienen, die keine Primärschlüssel sind.
             targetColumnsToChooseFrom = noPKs1;
-
+            // Wenn die in der App als Zweites angewählte Tabelle als Ziel ausgewählt wurde, ...
         } else if (targetTable == 'table_2') {
+            // ... können die Attribute der als Erstes ausgewählten Tabelle als Quellattribut dienen.
             sourceColumnsToChooseFrom = options1;
+            // ... können die Attribute der als Zweites ausgewählten Tabelle als Zielattribut dienen, die keine Primärschlüssel sind.
             targetColumnsToChooseFrom = noPKs2;
         } else {
             return false;
         }
+        // Entfernen aller Optionen des Dropdown-Menüs für das Zielattribut außer "Bitte auswählen" (als Platzhalter für keine Auswahl)
         removeAllExceptFirst(targetSelect);
+        // Hinzufügen der auswählbaren Attributnamen zum Dropdown-Menü für das Zielattribut
         appendOptions(targetSelect, targetColumnsToChooseFrom)
+        // Entfernen aller Optionen des Dropdown-Menüs für das Quellattribut
         removeAll(sourceSelect);
+        // Hinzufügen der auswählbaren Attributnamen zum Dropdown-Menü für das Quellattribut
         appendOptions(sourceSelect, sourceColumnsToChooseFrom)
         return true;
     }
-    /*https://www.javascripttutorial.net/javascript-dom/javascript-add-remove-options/*/
+
+    /* Entfernen aller Optionen aus einem Dropdown-Menü, übernommen von
+    https://www.javascripttutorial.net/javascript-dom/javascript-add-remove-options/ */
     function removeAll(selectBox) {
         while (selectBox.options.length > 0) {
             selectBox.remove(0);
         }
     }
 
+    /* Entfernen aller Optionen außer der ersten aus einem Dropdown-Menü, basierend auf
+    https://www.javascripttutorial.net/javascript-dom/javascript-add-remove-options/ */
     function removeAllExceptFirst(selectBox) {
         while (selectBox.options.length > 1) {
             selectBox.remove(1);
         }
     }
 
-
-    /* https://stackoverflow.com/questions/6601028/how-to-populate-the-options-of-a-select-element-in-javascript James Long */
+    /* Hinzufügen von Optionen zu einem Dropdown-Menü, übernommen von
+    https://stackoverflow.com/questions/6601028/how-to-populate-the-options-of-a-select-element-in-javascript James Long */
     function appendOptions(selectItem, optionsToChooseFrom) {
         for (var i = 0; i < optionsToChooseFrom.length; i++) {
             let option = document.createElement('option');

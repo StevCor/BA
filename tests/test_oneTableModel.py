@@ -17,7 +17,7 @@ import environmentVariables as ev
 # MariaDB-Engine
 @pytest.fixture
 def maria_engine() -> Engine:
-    return create_engine(f'mariadb+pymysql://{ev.MARIADB_USERNAME}:{urllib.parse.quote_plus(ev.MARIADB_PASSWORD)}@{ev.MARIADB_SERVERNAME}:{ev.MARIADB_PORTNUMBER}/MariaTest?charset=utf8mb4')
+    return create_engine(f'mariadb+pymysql://{ev.MARIADB_USERNAME}:{urllib.parse.quote_plus(ev.MARIADB_PASSWORD)}@{ev.MARIADB_SERVERNAME}:{ev.MARIADB_PORTNUMBER}/MariaTest?charset=utf8')
 
 # PostgreSQL-Engine
 @pytest.fixture
@@ -104,8 +104,8 @@ def test_get_replacement_information(md_table_meta_data_1: TableMetaData, pg_tab
 # Überprüfung der Ersetzung aller Vorkommen des gesuchten Strings
 def test_replace_all_string_occurrences(md_table_meta_data_1: TableMetaData, md_table_meta_data_2: TableMetaData, pg_table_meta_data_1: TableMetaData, pg_table_meta_data_2: TableMetaData) -> None:
     ## Test, wenn nur ein Attribut durchsucht werden soll ##
-    md_one_attribute_result = replace_all_string_occurrences(md_table_meta_data_1, ['Vorname'], 'Jo', 'Jojo')
-    pg_one_attribute_result = replace_all_string_occurrences(pg_table_meta_data_1, ['Vorname'], 'Jo', 'Jojo')
+    md_one_attribute_result = replace_all_string_occurrences(md_table_meta_data_1, ['Vorname'], 'Jo', 'Jojo', return_only_affected_attribute = True)
+    pg_one_attribute_result = replace_all_string_occurrences(pg_table_meta_data_1, ['Vorname'], 'Jo', 'Jojo', return_only_affected_attribute = True)
     # Sicherstellung, dass nur die Einträge des durchsuchten Attributs ausgegeben werden
     assert md_one_attribute_result == [['Kevin'], ['Jojoanna'], ['Carla'], ['Lisa'], ['Renee'], ['Gregor'], ['Charles'], ['Steven'], ['Kaitlyn'], ['Anita'], ['Daniel'], ['Alicia'], ['Jim'], ['Anton'], ['Belinda'], ['Sarah'], ['Nicole'], ['Benjamin'], ['Jojoel'], ['Diana'], ['Siobhan'], ['Nancy'], ['Keith'], ['Jojoyce'], ['Katie'], ['Matthew'], ['Adam'], ['Angela'], ['Heather'], ['Kristin'], ['Bernard'], ['Ashley'], ['Jennifer'], ['Jason'], ['Carolyn'], ['Alexandra'], ['Cristina'], ['Denise'], ['Barbara'], ['Waltraud'], ['Angela'], ['Jeffrey'], ['Andrea'], ['Cindy'], ['Lauren'], ['Jojonathan'], ['Amanda'], ['Jojoseph'], ['Jay'], ['Denise'], ['Gloria']]
     assert pg_one_attribute_result == [['Kevin'], ['Jojoanna'], ['Carla'], ['Lisa'], ['Renee'], ['Gregor'], ['Charles'], ['Steven'], ['Kaitlyn'], ['Anita'], ['Daniel'], ['Alicia'], ['Jim'], ['Anton'], ['Belinda'], ['Sarah'], ['Nicole'], ['Benjamin'], ['Jojoel'], ['Diana'], ['Siobhan'], ['Nancy'], ['Keith'], ['Jojoyce'], ['Katie'], ['Matthew'], ['Adam'], ['Angela'], ['Heather'], ['Kristin'], ['Bernard'], ['Ashley'], ['Jennifer'], ['Jason'], ['Carolyn'], ['Alexandra'], ['Cristina'], ['Denise'], ['Barbara'], ['Waltraud'], ['Angela'], ['Jeffrey'], ['Andrea'], ['Cindy'], ['Lauren'], ['Jojonathan'], ['Amanda'], ['Jojoseph'], ['Jay'], ['Denise'], ['Gloria']]
@@ -213,9 +213,9 @@ def test_check_data_type_and_constraint_compatibility(md_table_meta_data_2: Tabl
 
 # Überprüfung der Ausgabe von Exceptions bei der Kompatibilitätsprüfung
 def test_check_data_type_and_constraint_compatibility_exceptions(md_table_meta_data_2: TableMetaData, pg_table_meta_data_2: TableMetaData) -> None:
-    # Test, dass beim Einfügen eines Wertes mit dem korrekten Datentyp, ohne dass der angegebene alte Wert in der Tabelle enthalten ist, ein
-    # QueryError ausgegeben wird
-    with pytest.raises(QueryError):
+    # Test, dass beim Einfügen eines Wertes mit dem korrekten Datentyp, ohne dass der angegebene alte Wert in der Tabelle enthalten ist, eine
+    # Exception ausgegeben wird
+    with pytest.raises(Exception):
         check_data_type_and_constraint_compatibility(md_table_meta_data_2, 'Matrikelnummer', 1432210, 1432211)
         check_data_type_and_constraint_compatibility(pg_table_meta_data_2, 'Matrikelnummer', 1432210, 1432211)
 

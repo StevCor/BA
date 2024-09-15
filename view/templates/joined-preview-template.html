@@ -1,17 +1,21 @@
+<!-- Vorlage für die Vorschau der Operationen auf zwei Tabellen -->
 <!DOCTYPE html>
 <html lang="de">
 
 <head>
-    <title>SQL-Datenbanken{% block title %}{% endblock title %} </title>
+    <title>SQL-Datenbanken{% block title %}{# Platzhalter für eventuelle Zusätze für den Seitentitel #}{% endblock title
+        %} </title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
-    <link rel="stylesheet" href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" />
+    <!-- Link zur CSS-Datei für die Grid.js-Tabelle -->
+    <link rel="stylesheet" href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css">
+    <!-- Link zur CSS-Datei für die eigenen Elemente -->
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
 </head>
 
 
 <body>
+    <!-- Header mit den Informationen über die aktuelle(n) Datenbankverbindung(en) und Logout-Buttons -->
     <nav class="navtop">
         <div>
             <h1>Willkommen, {{user_name}}!</h1>
@@ -28,6 +32,7 @@
         </div>
     </nav>
 
+    <!-- Navigationsleiste mit den Links zu den Seiten für die Operationen auf zwei Tabellen -->
     <div class="links">
         <button id="back">Zurück</button>
         <a href="{{ url_for('compare_two_tables') }}" {% block compare_active %}{% endblock compare_active %}>Tabellen
@@ -35,28 +40,48 @@
         <a href="{{ url_for('merge_tables') }}" {% block merge_active %}{% endblock merge_active %}>Tabellen
             verbinden</a>
     </div>
+
+    <!-- Platzhalter für die Überschrift der Vorschautabelle -->
     {% block table_title %}
     {% endblock table_title %}
+
+    <!-- Container für die Vorschautabelle -->
     <div id="joined-table"></div>
 
+    <!-- Platzhalter für die Statistik oder das für die Durchführung der Operation benötigte HTML-Formular -->
     {% block statistics_or_form %}
     {% endblock statistics_or_form %}
 
+    <!-- Darstellung der Nachrichten, die mittels flash() übergeben wurden -->
+    {% include 'message.html' %}
 
+    <!-- JavaScript für die allgemeine Darstellung der Grid.js-Tabelle -->
     <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+
+    <!-- JavaScript mit der Funktion für die app-spezifische Anzeige der Grid.js-Tabelle (z. B. Beschriftungen der Tabellenelemente) -->
     <script src="{{url_for('static', filename='showTable.js')}}"></script>
+
+    <!-- JavaScript für die Funktion zur Abfrage einer Bestätigung bei Klick auf einen Zurück-Button -->
     <script src="{{url_for('static', filename='confirmBack.js')}}"></script>
+
     <script>
+        // Umwandlung der mit Python übergebenen darzustellenden Attributnamen und Tabellendaten in JavaScript-Arrays
         var columns = {{ table_columns | tojson | safe }};
         var data = {{ data | tojson | safe }};
+        // Darstellung der Vorschautabelle
         showTable(columns, data, 'joined-table');
 
-
+        // EventListener zur Abfrage einer Bestätigung bei Klick auf den Zurück-Button
         let backButton = document.getElementById('back')
         backButton.addEventListener('click', function () {
             confirmBack();
         });
 
+        // EventListener für die Trennung der Datenbankverbindung bei Klick auf den entsprechenden Button 
+        const disconnectButton = document.getElementById('disconnect');
+        disconnectButton.addEventListener('click', function () {
+            return confirm('Sind Sie sicher, dass Sie die Datenbankverbindungen trennen wollen? Sie kehren dann zur Anmeldeseite zurück.');
+        });
     </script>
 </body>
 

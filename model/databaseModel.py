@@ -76,6 +76,14 @@ def connect_to_db(user_name:str, password:str, host:str, port:int, db_name:str, 
         except UnboundLocalError:
             # Wenn keine Verbindung aufgebaut werden konnte, muss auch keine geschlossen werden.
             pass
+    # Zuletzt wird überprüft, ob die angegebene Zeichencodierung mit der tatsächlichen Zeichencodierung der Datenbank übereinstimmt
+    encoding = check_database_encoding(engine)
+    # Ist dies nicht der Fall, wird die Engine nochmal mit der tatsächlichen Codierung erstellt
+    if encoding.lower() != db_encoding.lower():
+        if(db_dialect == 'mariadb'):
+            engine = create_engine(f'{db_dialect}+pymysql://{db_url}?charset={encoding.lower()}')
+        elif(db_dialect == 'postgresql'):
+            engine = create_engine(f'{db_dialect}://{db_url}', connect_args = {'client_encoding': {encoding}})
     # Ausgabe der erstellten Engine
     return engine
 

@@ -2,6 +2,7 @@ Einrichtung des Projekts:
 1.  Installation von Python 3.11 und der Python-Module aus requirements.txt (entweder für die gesamte Python-Installation oder in einer         virtuellen Umgebung)
 2.  Ausführen von app.py
 3.  Aufruf der Web-App im Browser unter localhost:8000, Verwendung der lokal vorhandenen Daten
+4.  Die Anzeige der mit Grid.js erstellten Tabellen funktioniert nur bei bestehender Internetverbindung.
 
 Vorbereitung für die Tests:
 1.  Anmeldung an je einem lokalen MariaDB- und PostgreSQL-Server

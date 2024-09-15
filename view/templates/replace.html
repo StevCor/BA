@@ -1,8 +1,11 @@
+<!-- Nutzen der Vorlage für die Darstellung der Startseiten von Operationen auf einer Tabelle -->
 {% extends "one-table-template.html" %}
 
+<!-- Anpassung des Seitentitels -->
 {% block title %}: Suchen und Ersetzen
 {% endblock title %}
 
+<!-- Aktivierung des Links zur Ersetzungsfunktion in der Navigationsleiste -->
 {% block replace_active %} class="active" {% endblock %}
 
 {% block one_table_form %}
@@ -10,8 +13,11 @@
     Bitte wählen geben Sie an, in welchen Spalten die Ersetzung vorgenommen werden soll. Kommt der gesuchte String
     mehrfach in einem Eintrag vor, werden alle Vorkommen ersetzt. Bei Eingabe eines
     leeren Strings wird der gesuchte String gelöscht.
+    <!-- Bündelung der Input-Elemente für die Operationsausführung und ihrer Labels, damit sie hintereinander stehen -->
     <div class="groups">
+        <!-- Gruppierung des Dropdown-Menüs mit seinem Label -->
         <div class="item">
+            <!-- Dropdown-Menü für die Auswahl des zu durchsuchenden Attributs -->
             <label class="colored" for="column-to-search">Spalte auswählen:</label>
             <select name="column-to-search" id="column-to-search" required>
                 <option value="all">Alle Spalten</option>
@@ -20,39 +26,48 @@
                 {% endfor %}
             </select>
         </div>
+        <!-- Gruppierung des Textfeldes für den Such-String mit seinem Label -->
         <div class="item">
             <label class="colored" for="search-string">Suchen:</label>
+            <!-- Der Such-String muss mindestens zwei Zeichen enthalten -->
             <input type="text" id="searchstring" name="searchstring" minlength="2">
         </div>
+        <!-- Gruppierung des Textfeldes für den Ersatz-String mit seinem Label -->
         <div class="item">
             <label class="colored" for="replacement">Ersetzen durch:</label>
             <input type="text" id="replacement" name="replacement">
         </div>
-        <input type="hidden" id="engine-no" name="engine-no" value="{{ engine_no }}">
-        <input type="hidden" id="table-name" name="table-name" value="{{ table_name }}">
+        <!-- Gruppierung des Absende-Buttons -->
         <div class="item">
             <input type="submit" id="preview" value="Vorschau">
         </div>
-    </div>
 
+        <!-- Übermittlung des Tabellennamens für die Ausführung der Ersetzung auf Grundlage der Vorschau -->
+        <input type="hidden" id="table-name" name="table-name" value="{{ table_name }}">
+    </div>
 </form>
 {% endblock one_table_form %}
 
+<!-- Erweiterung des JavaScript-Blocks der Vorlage -->
 {% block more_js %}
 <script>
     function showWarnings() {
-        if (document.forms['replace-params'].replacement.value === "") {
+        // Abfrage einer Bestätigung für das Löschen des gesuchten Wertes, falls dieser leer oder "NULL" ist
+        if (document.forms['replace-params'].replacement.value === "" or document.forms['replace-params'].replacement.value === "NULL") {
             if (confirm("Sind Sie sicher, dass Sie den gesuchten (Teil-)Wert löschen wollen?") == true) {
                 return true;
             } else {
                 return false;
             }
+            // Information über den Abbruch der Operation, wenn der neue Wert dem alten entspricht
         } else if (document.forms['replace-params'].replacement.value === document.forms['replace-params'].searchstring.value) {
             alert("Der zu ersetzende und der neue Wert sind gleich. Daher werden keine Änderungen vorgenommen.")
             return false
         }
         return true;
     }
+
+    // Hinzufügen des EventListeners zur Anzeige der Warnungen zum Vorschau-Button
     let previewButton = document.getElementById('preview');
     previewButton.addEventListener('click', function () {
         return showWarnings();

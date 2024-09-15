@@ -1,33 +1,53 @@
+<!-- Nutzen der Vorlage für die Vorschau der Operationen auf zwei Tabellen -->
 {% extends "joined-preview-template.html" %}
 
+<!-- Anpassung des Titels, je nachdem, ob es sich um die Vorschau für den Vergleich oder die Attributsübertragung handelt -->
 {% block title %}
 : {% if mode == 'compare'%}Join-Vorschau{% elif mode == 'merge'%}Übertragungsvorschau{% endif%}
 {% endblock title %}
 
+<!-- Aktivierung des Links zur Vergleichsfunktion, wenn es sich um die Vergleichsvorschau handelt -->
 {% if mode == 'compare' %}{% block compare_active %} class="active" {% endblock compare_active %}
+<!-- Aktivierung des Links zur Attributübertragungsfunktion, wenn es sich um die Attributübertragungsvorschau handelt -->
 {% elif mode == 'merge' %}{% block merge_active %} class="active" {% endblock merge_active %}
 {% endif %}
 
+<!-- Tabellentitel -->
 {% block table_title %}
+<!-- für die Vergleichsfunktion -->
 {% if mode == 'compare '%}
 <h4>Join der Tabellen {{ db_name_1 }}.{{ table_name_1 }} und {{ db_name_2 }}.{{ table_name_2 }}, verbunden über
     {{ table_name_1 }}.{{ join_attribute_1 }} und {{ table_name_2 }}.{{ join_attribute_2 }}</h4>
+<!-- für die Attributübertragungsfunktion -->
 {% elif mode == 'merge' %}
-<h4>Vorschau der Tabelle {{ db_name }}.{{ table_name }} mit dem neu eingefügten Attribut {{ new_column_name }}
+<h4>Vorschau der Tabelle {{ db_name }}.{{ table_name }} mit dem übertragenen Attribut {{ new_column_name }}
 </h4>
 {% endif %}
 {% endblock table_title %}
 
+<!-- Darstellung zusätzlicher Elemente unter der Vorschautabelle -->
 {% block statistics_or_form %}
+<!-- Im Fall der Vergleichsfunktion wird hier angezeigt, wie vielen Tupeln aus den beiden Tabellen keine Tupel ihres Gegenübers zugeordnet werden konnten -->
 {% if mode == 'compare '%}
 {{ unmatched_rows[0] }} Tupel aus {{ db_name_1 }}.{{ table_name_1 }} und {{
 unmatched_rows[1] }} Tupel aus {{ db_name_2 }}.{{ table_name_2 }} konnten keinem Tupel aus der
 anderen Tabelle zugeordnet werden.
+<!-- Im Fall der Attributübertragungsfunktion wird hier ein Formular benötigt -->
 {% elif mode == 'merge' %}
 <form action="/merge" method="POST">
+    <!-- Mit diesem Element wird übermittelt, welche der beiden Tabellen das Ziel der Attributübertragung ist -->
     <input type="hidden" name="target-table-meta-data" value="{{ target_meta_data_no }}">
-    <input type="submit" name="abort-merge" value="Abbrechen">
-    <input type="submit" name="merge" value="Attribut übertragen">
+    <!-- Gruppierung der Buttons, damit zwischen diesen Abstand besteht -->
+    <div class="groups">
+        <div class="item">
+            <!-- Button für den Abbruch der Operation -->
+            <input type="submit" name="abort-merge" value="Abbrechen">
+        </div>
+        <div class="item">
+            <!-- Button für die Ausführung der Operation -->
+            <input type="submit" name="merge" value="Attribut übertragen">
+        </div>
+    </div>
 </form>
 {% endif %}
 {% endblock statistics_or_form %}

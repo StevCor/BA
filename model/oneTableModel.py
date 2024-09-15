@@ -168,7 +168,7 @@ def get_replacement_information(table_meta_data:TableMetaData, affected_attribut
     ### Ermittlung der betroffenen Tupel, wenn nur ein Attribut involviert sein kann ### 
     else:
         ### Wie zuvor werden die Tabelle mit allen Ersetzungen und die Nummern der betroffenen Tupel bezogen ###
-        attribute_with_full_replacement = replace_all_string_occurrences(table_meta_data, affected_attributes, old_value, replacement, commit = False)
+        attribute_with_full_replacement = replace_all_string_occurrences(table_meta_data, affected_attributes, old_value, replacement, commit = False, return_only_affected_attribute = True)
         affected_row_nos_and_unaltered_entries = get_row_number_of_affected_entries(table_meta_data, affected_attributes, [old_value], 'replace', convert = False)
         row_nos_old_and_new_values = {}
         # Hier ist jedoch nur ein Attribut betroffen, sodass keine Liste erforderlich ist.
@@ -205,7 +205,7 @@ def get_replacement_information(table_meta_data:TableMetaData, affected_attribut
     # Ausgabe der vollständigen Dictionarys
     return row_nos_old_and_new_values, occurrence_dict
 
-def replace_all_string_occurrences(table_meta_data:TableMetaData, column_names:list, string_to_replace:str, replacement_string:str, commit:bool = False):
+def replace_all_string_occurrences(table_meta_data:TableMetaData, column_names:list, string_to_replace:str, replacement_string:str, commit:bool = False, return_only_affected_attribute:bool = False):
     """Ersetzt alle Vorkommen des gesuchten Wertes, für Strings auch als Teilersetzungen und gibt die aktualisierte Tabelle aus.
     
     table_meta_data: TableMetaData-Objekt der betroffenen Tabelle
@@ -218,7 +218,9 @@ def replace_all_string_occurrences(table_meta_data:TableMetaData, column_names:l
     
     commit: Flag für das Schreiben der Änderung in die Datenbank. Das Ergebnis der Anweisung wird nur gespeichert, wenn dieser Parameter True ist.
 
-    Ausgabe der gesamten aktualisierten Tabelle (bzw. des aktualisierten Attributs, wenn nur eines ausgewählt wurde) als Liste von Listen; Ausgabe
+    return_only_affected_attribute: Flag für eine Beschränkung des ausgegebenen Abfrageergebnisses auf das betroffene Attribut
+
+    Ausgabe der gesamten aktualisierten Tabelle bzw. des aktualisierten Attributs, wenn dies ausgewählt wurde als Liste von Listen; Ausgabe
     eines UpdateErrors, wenn bei der Abfrageausführung Fehler auftreten."""
 
     ### Vorbereiten der Variablen für die Datenbankabfrage, ggf. mit Escaping ###
@@ -284,8 +286,8 @@ def replace_all_string_occurrences(table_meta_data:TableMetaData, column_names:l
         connection = engine.connect()
         connection.execute(query, update_params)
         ## Anschließend wird das Ergebnis der Änderung über dieselbe Verbindung abgefragt. ##
-        # Wurde nur ein zu betrachtendes Attribut angegeben, wird nur dieses abgefragt.
-        if len(column_names) == 1:
+        # Wenn gewünscht, wird nur das betroffene Attribut abgefragt.
+        if return_only_affected_attribute:
             column_name = convert_string_if_contains_capitals_or_spaces(column_names[0], db_dialect)
             result = connection.execute(text(f'SELECT {column_name} FROM {table_name} ORDER BY {primary_keys}'))
         # Anderenfalls werden alle Attribute der Tabelle abgefragt.
@@ -374,14 +376,21 @@ def get_indexes_of_affected_attributes_for_replacing(table_meta_data:TableMetaDa
     # In MariaDB muss die Abfrage mit der binären Version der Datenbankkollation ausgeführt werden, damit das Matching unter Berücksichtigung
     # von Groß- und Kleinschreibung erfolgt.
     if db_dialect == 'mariadb':
-        query = f'{query} COLLATE {check_database_encoding(engine)}_bin'
+        # Der Zeichensatz der Tabelle wird im Ergebnis der Abfrage SHOW TABLE STATUS an 15. Stelle ausgegeben
+        character_set = str(execute_sql_query(engine, text(f"SHOW TABLE STATUS WHERE name LIKE '{table_name}'")).fetchone()[14])
+        # Da die binäre Version des grundlegenden Zeichensatzes benötigt wird, müssen Zusätze (wie 'mb3' in 'utf8mb3') entfernt werden
+        if 'latin1' in character_set:
+            character_set = 'latin1'
+        elif 'utf8' in character_set:
+            character_set = 'utf8'
+        # Zuletzt wird der Abfrage die Kollation angehängt
+        query = f'{query} COLLATE {character_set}_bin'
     # Ausführen der Abfrage
     result = execute_sql_query(engine, text(query), params_dict)
 
     ### Aufbau des Rückgabe-Dictionarys ###
     row_ids = dict()
     for index, row in enumerate(result):
-        print(row)
         # Für alle Ergebniszeilen der Abfrage, die nicht nur Nullen enthalten, ...
         if sum(row) != 0:
             # ... wird dem Dictionary ein Eintrag mit der Zeilenummer als Schlüssel (index + 1, da die SQL-Funktion ROW_NUMBER() ab 1 zählt) und
@@ -478,7 +487,6 @@ def replace_some_string_occurrences(table_meta_data:TableMetaData, occurrences_d
 
         ### Zusammenfügen und Ausführen der UPDATE-Anweisung ###
         query = text(f'{query} {condition}')
-        print(query)
         try:
             execute_sql_query(engine, query, update_params, raise_exceptions = True, commit = commit)
         # Bei Fehlern werden die Primärschlüsselwerte des aktuellen Vorkommens in die Liste der fehlgeschlagenen Änderungen aufgenommen.
@@ -654,7 +662,7 @@ def check_data_type_and_constraint_compatibility(table_meta_data:TableMetaData, 
         # Ist das Ergebnis leer oder None, konnte der gesuchte Wert nicht im angegebenen Attribut gefunden werden, sodass der Ersetzungsvorgang
         # nicht sinnvoll ist und mit einer Fehlermeldung abgebrochen wird.
         if len(result) == 0 or result is None:
-            raise QueryError(f'Der gesuchte Wert \'{old_value}\' kommt im Attribut {column_name} nicht vor.\n')
+            raise Exception(f'Der gesuchte Wert \'{old_value}\' kommt im Attribut {column_name} nicht vor.\n')
         
         # Ansonsten wird der erste Wert der ersten Zeile des Ergebnisses (d. h. der einzige Wert) für die Bedingung der Test-UPDATE-Anweisung übernommen.
         condition_value = result[0][0]
@@ -809,9 +817,17 @@ def get_row_number_of_affected_entries(table_meta_data:TableMetaData, affected_a
     # In MariaDB muss die Abfrage mit der binären Version der Datenbankkollation ausgeführt werden, damit das Matching unter Berücksichtigung
     # von Groß- und Kleinschreibung erfolgt.
     if db_dialect == 'mariadb':
-        query = f'{query} COLLATE {check_database_encoding(engine)}_bin'
+        # Der Zeichensatz der Tabelle wird im Ergebnis der Abfrage SHOW TABLE STATUS an 15. Stelle ausgegeben
+        character_set = str(execute_sql_query(engine, text(f"SHOW TABLE STATUS WHERE name LIKE '{table_name}'")).fetchone()[14])
+        # Da die binäre Version des grundlegenden Zeichensatzes benötigt wird, müssen Zusätze (wie 'mb3' in 'utf8mb3') entfernt werden
+        if 'latin1' in character_set:
+            character_set = 'latin1'
+        elif 'utf8' in character_set:
+            character_set = 'utf8'
+        # Zuletzt wird der Abfrage die Kollation angehängt
+        query = f'{query} COLLATE {character_set}_bin'
     # Ausführen der Abfrage
-    result = execute_sql_query(engine, text(query), condition_params)
+    result = execute_sql_query(engine, text(query), condition_params, raise_exceptions=True)
     # Ausgabe des in eine Liste von Listen umgewandelten Ergebnisses ...
     if convert:
         return convert_result_to_list_of_lists(result)

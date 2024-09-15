@@ -1,3 +1,4 @@
+<!-- Seite für die Auswahl der Tabellen aus einer aktiven Datenbank -->
 <!DOCTYPE html>
 <html lang="de">
 
@@ -5,12 +6,11 @@
     <title>SQL-Datenbanken</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Link zur verwendeten CSS-Datei -->
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/table-selection.css') }}">
-    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.7.1/css/all.css">
 </head>
 
 <body>
-
     <div class="selecttable">
         <h1>Auswahl der Tabellen aus der aktiven Datenbank {{ db_name }}</h1>
         {% if engine_no == 1 %}
@@ -18,6 +18,9 @@
         {% elif engine_no == 2 %}
         <h3>Bitte wählen Sie eine Tabelle der Datenbank {{ db_name }} aus, um mit dieser zu arbeiten:</h3>
         {% endif %}
+        <!-- Informations-Icon, neben dem bei Mouse-over ein Hinweis angezeigt wird, dass ausgegraute Tabellen nicht ausgewählt werden können.
+        Handelt es sich um die Tabellenauswahl für die erste Datenbank, wird zudem erklärt, wie zwei Tabellen aus derselben Tabelle ausgewählt
+        werden können. -->
         <div class="tip">&#x1F6C8;
             <span class="tiptext">Ausgegraute Tabellen sind leer oder haben keine Primärschlüssel und können daher nicht
                 verwendet werden. Per Doppelklick auf einen Tabellennamen wird eine Tabellenvorschau angezeigt.
@@ -27,16 +30,21 @@
             </span>
         </div>
 
-
+        <!-- Formular für die Übermittlung der ausgewählten Tabelle(n) -->
         <form id="table-form" action="/tables" method="POST">
             <div class="table-list">
                 <div class="list-column-title">
 
                 </div>
                 <div class="tables">
+                    <!-- Anzeige des Dropdown-Menüs zur Tabellenauswahl als Feld mit einer Größe, das bis zu 15 Optionen gleichzeitig darstellen kann
+                    und die Auswahl mehr als einer Option gleichzeitig erlaubt -->
                     <select id="multi-select" name="selected-table" multiple size="15" required>
                         {% for table_name in tables %}
+                        {# Zähler für die Anzahl der Attribute der aktuellen Tabelle #}
                         {% set table_total = tables[table_name] | length %}
+                        <!-- Wenn die Tabelle keine Primärschlüssel enthält oder leer ist, kann sie nicht ausgewählt werden -->
+                        <!-- Anzeige der Tabellenmetadaten in der Form "Tabelle X mit den Spalten X, Y und Z" -->
                         <option value="{{ table_name }}" {% if table_name in tables_without_keys or previews[table_name]
                             | length==0 %} disabled {% endif %}>
                             {{ table_name }} mit den Spalten
@@ -56,33 +64,42 @@
                     </select>
                 </div>
             </div>
+            <!-- Checkbox inkl. Label für den Aufbau einer weiteren Datenbankverbindung -->
             <input type="checkbox" id="second-db-checkbox" name="second-db-checkbox">
             <label for="second-db-checkbox">Mit zweiter Datenbank verbinden</label>
+            <!-- Übermittlung der Nummer der aktuellen Datenbank, damit das eventuell nachfolgend angezeigte Datenbankanmeldeformular angepasst werden kann -->
             <input type="hidden" id="engine-no" name="engine-no" value="{{ engine_no }}">
 
+            <!-- Darstellung der Nachrichten, die mittels flash() übergeben wurden -->
             {% include 'message.html' %}
 
-
+            <!-- Buttons -->
             <div class="buttons">
+                <!-- Buttons für die Trennung der Datenbankverbindung -->
                 <div class="links">
                     <a href="{{ url_for('disconnect_from_db', engine_no = engine_no) }}"><button
                             id="back">Zurück</button></a>
                 </div>
             </div>
+
+            <!-- Absende-Button des Formulars -->
             <input type="submit" value="Tabellen auswählen">
-
-
-
         </form>
     </div>
+
+    <!-- Modals für die Anzeige einer Vorschau mit den ersten 20 Einträgen jeder Tabelle in der aktiven Datenbank, das per Doppelklick auf
+    den Tabellennamen geöffnet werden kann -->
     {% for key in previews.keys() %}
     <div class="modal">
 
-        <!-- Modal content -->
+        <!-- Inhalt des Modals -->
         <div class="modal-content">
+            <!-- Button zum Schließen des Modals, dargestellt als Kreuz -->
             <span class="close">&times;</span>
+            <!-- Darstellung der Vorschau als HTML-Tabelle -->
             <h2>Vorschau für die Tabelle {{ key }}</h2>
             <table>
+                <!-- Kopfzeile mit den Attributnamen -->
                 <thead>
                     <tr>
                         {% for column in tables[key] %}
@@ -90,11 +107,14 @@
                         {% endfor %}
                     </tr>
                 </thead>
+                <!-- Tabellenkörper -->
                 <tbody>
+                    <!-- Wenn die von Python übermittelte Vorschau keine Tupel enthält, wird der Hinweis angezeigt, dass die Tabelle leer ist -->
                     {% if previews[key] | length == 0 %}
                     <tr>
-                        <td colspan="{{ tables[key] | length }}">Keine passenden Einträge gefunden</td>
+                        <td colspan="{{ tables[key] | length }}">Diese Tabelle enthält keine Einträge.</td>
                     </tr>
+                    <!-- Anderenfalls werden die als Vorschau übermittelten Tupel (max. 20) angezeigt -->
                     {% else %}
                     {% for row in previews[key] %}
                     <tr>
@@ -111,30 +131,44 @@
     </div>
     {% endfor %}
 
+    <!-- JavaScript für die Funktion zur Abfrage einer Bestätigung bei Klick auf einen Zurück-Button -->
     <script src="{{url_for('static', filename='confirmBack.js')}}"></script>
-    <script type="text/javascript">
 
+    <script type="text/javascript">
+        // EventListener zur Abfrage einer Bestätigung bei Klick auf den Zurück-Button
         const backButton = document.getElementById('back');
         backButton.addEventListener('click', function () {
             confirmBack();
         });
 
+        // Checkbox zur Auswahl, ob nach der Tabellenfestlegung eine Verbindung zu einer weiteren Datenbank aufgebaut werden soll
         const dbCheckbox = document.getElementById('second-db-checkbox');
+        // Funktion zur Beschränkung der Auswahl der Tabellen auf ein festgelegtes Limit
         function limitSelection(selectElement, limit) {
             selectElement.addEventListener('change', function () {
+                // Aktuell angewählte Optionen des Dropdown-Menüs
                 const selectedOptions = Array.from(selectElement.selectedOptions);
+                // Wenn deren Anzahl das festgelegte Limit überschreitet, 
                 if (selectedOptions.length > limit) {
+                    // ... wird die Auswahl auf die ersten [limit] ausgewählten Optionen zurückgesetzt ...
                     for (var selectCount = selectedOptions.length; selectCount > limit; --selectCount) {
                         selectedOptions[selectCount - 1].selected = false;
                     }
+                    // ... und ein Hinweis angezeigt, wie viele Tabellen max. ausgewählt werden können.
                     alert('Sie können nur maximal ' + limit + ' Tabellen auswählen.');
                 }
+
+                // Variable zur Bestimmung, wie viele Datenbanken in der App bereits aktiv sind
                 const engineNo = "{{ engine_no }}";
-                if (engineNo == 2 || selectedOptions.length > 1) {
+                // Wenn aktuell die Tabellenauswahl für die zweite Datenbank angezeigt wird oder bereits [limit] Tabellen ausgewählt wurden, ...
+                if (engineNo == 2 || selectedOptions.length > limit - 1) {
+                    // ... wird die Checkbox für die Verbindung zu einer weiteren Datenbank ausgegraut und somit nicht anklickbar.
                     dbCheckbox.disabled = true;
+                    // Ihr Label wird ebenfalls ausgegraut.
                     for (label of dbCheckbox.labels) {
                         label.style.color = 'lightGray';
                     }
+                    // Anderenfalls ist die Checkbox für eine weitere Datenbankverbindung nutzbar und das Label wird in Schwarz angezeigt.
                 } else {
                     dbCheckbox.disabled = false;
                     for (label of dbCheckbox.labels) {
@@ -143,44 +177,51 @@
                 }
             });
         }
+
+        // Dropdown-Menü für die Tabellenauswahl
         const multiSelect = document.getElementById('multi-select');
+        // Nummer der zugehörigen Datenbank
         const engineNo = "{{ engine_no }}";
+        // Anzahl der bereits in der App ausgewählten Tabellen
         const tablesInUse = "{{ tables_in_use }}";
+        // Limit für die Anzahl der auswählbaren Tabellen
         let limit;
+        // Wenn es sich um die zweite Datenbank handelt oder bereits Tabellen ausgewählt wurden, wird das Limit auf 1 gesetzt und die Checkbox
+        // sowie ihr Label werden ausgeblendet.
         if (engineNo == 2 || tablesInUse != 0) {
             limit = 1;
             dbCheckbox.style.display = 'none';
             for (label of dbCheckbox.labels) {
                 label.style.display = 'none';
             }
+            // Handelt es sich hingegen um die erste Datenbank, wird das Limit auf 2 gesetzt
         } else {
             limit = 2;
         }
+        // Anlegen des EventListeners für die Limitierung
         limitSelection(multiSelect, limit)
 
+        /* Darstellung der Vorschau-Modals */
 
+        // Optionen des Dropdown-Menüs
         const selOptions = document.querySelectorAll('option');
+        // Vorschau-Modals
         const modals = document.getElementsByClassName('modal');
+        // Buttons zum Schließen der Modals
         const closeItems = document.getElementsByClassName('close');
+        // Hinzufügen der EventListener je Modal
         for (let i = 0; i < selOptions.length; ++i) {
             var optionId = i + 1;
+            // Anzeige des Modals bei Doppelklick auf den Tabellennamen
             selOptions[i].addEventListener('dblclick', function () {
                 modals[i].style.display = 'block';
             });
+            // Ausblenden des Modals bei Klick auf den Schließen-Button
             closeItems[i].addEventListener('click', function () {
                 modals[i].style.display = 'none';
             });
 
         }
-        // When the user clicks anywhere outside of the modal, close it
-        document.onclick = function (event) {
-            for (let j = 0; j < modals.length; ++j) {
-                if (modals[j].style.display != 'none' && !Array.from(modals).includes(event.target)) {
-                    modals[j].style.display = 'none';
-                }
-            }
-        }
-
     </script>
 </body>
 

@@ -761,8 +761,10 @@ def simulate_merge_and_build_query(target_table_data:TableMetaData, source_table
         if add_table_names_to_column_names:
             source_attribute_index = joined_column_names.index(f'{source_table_data.table_name}.{source_attribute_to_insert}')
         else:
-            # Anderenfalls wird lediglich der Index des einzufügenden Attributs in der Attributliste nachgeschlagen.
-            source_attribute_index = joined_column_names.index(source_attribute_to_insert)
+            # Anderenfalls wird lediglich der Index des einzufügenden Attributs in der Attributliste nachgeschlagen. Da die Zieltabelle bereits
+            # ein Attribut mit dem Namen des Quellattributs enthalten kann, wird hierfür die Position des letzten Vorkommens des Zielattributnamens
+            # in der Liste benötigt (übernommen von https://stackoverflow.com/questions/6890170/how-to-find-the-last-occurrence-of-an-item-in-a-python-list)
+            source_attribute_index = len(joined_column_names) - joined_column_names[::-1].index(source_attribute_to_insert)-1
 
         target_attribute = convert_string_if_contains_capitals_or_spaces(target_attribute, target_dialect)
         target_table = convert_string_if_contains_capitals_or_spaces(target_table, target_dialect)
@@ -800,30 +802,45 @@ def simulate_merge_and_build_query(target_table_data:TableMetaData, source_table
         # Wenn mindestens einer der einzutragenden Werte nicht 'NULL' ist, ...
         if not_null_counter > 0:
             # ... wird die Case-Anweisung mit 'END' abgeschlossen.
-            update_query = f'{update_query} END;'
+            update_query = f'{update_query} END'
         # Anderenfalls werden der Vollständigkeit halber alle Werte des eingefügten Attributs auf den Standardwert gesetzt. (Passiert auch automatisch beim Anlegen des Attributs)
         else:
-            update_query = f'{update_query} DEFAULT;'
+            update_query = f'{update_query} DEFAULT'
 
     ### Ausführung der Update-Anweisung für alle SQL-Dialekt-Konstellationen ###
     result = None
-    
-        # Zunächst werden die (ggf. leere) Anweisung zum Hinzufügen der neuen Spalte und die Update-Anweisung zusammengefügt, um sie unmittelbar nacheinander über die gleiche Datenbankverbindung ausführen zu können.
-    add_and_update_query = f'{add_column_query} {update_query}'
-    print(add_and_update_query)
-    text_query = text(add_and_update_query)
+    add_and_update_query = ''
     with target_engine.connect() as connection:
+        # In MariaDB müssen das Hinzufügen des neuen Attributs und die Eintragung der neuen Werte in getrennten Abfragen erfolgen.
+        if target_dialect == 'mariadb':
+            # Daher wird das Attribut zunächst hinzugefügt, wenn hierfür eine nicht leere Anweisung existiert.
+            if add_column_query.strip() != '':
+                connection.execute(text(add_column_query))
+            # In der anschließend ausgeführten Anweisung erfolgt somit nur das Einfügen der neuen Werte.
+            add_and_update_query = f'{update_query}'
+        # In PostgreSQL kann beides unmittelbar nacheinander erfolgen, wenn die Abfragen durch ein Semikolon getrennt sind.
+        elif target_dialect == 'postgresql':
+            add_and_update_query = f'{add_column_query} {update_query}'
+        # Umwandlung der Anweisung in sqlalchemy.text, damit die Anweisung als String ausgegeben werden kann
+        text_query = text(add_and_update_query)
+        ## Ausführung mit Binden von Parametern ##
         if params != None:
             for key in params.keys():
                 text_query.bindparams(bindparam(key))
             connection.execute(text_query, params)
-        # Ausführung der Update-Anweisung
+        # Ausführung der UPDATE-Anweisung ohne Parameter
         else:
             connection.execute(text_query)
         # Anschließend wird der neue Stand der Zieltabelle über dieselbe Verbindung abgefragt, um das Ergebnis auch ohne Speicherung beziehen zu können.
         result = connection.execute(text(f'SELECT * FROM {target_table}'))
-        # Zusätzlich zum Ergebnis wird die Anweisung für das Erstellen des neuen Attributs und für die Aktualisierung der Zieltabelle ausgegeben, damit diese nicht neu erstellt werden muss.
-        return result, add_and_update_query, params
+        try:
+            connection.close()
+        except Exception:
+            pass
+    # dialektunabhängiges Zusammensetzen beider Anfragen zu einer für die Ausgabe
+    add_and_update_query = f'{add_column_query} {update_query}'
+    # Zusätzlich zum Ergebnis wird die Anweisung für das Erstellen des neuen Attributs und für die Aktualisierung der Zieltabelle ausgegeben, damit diese nicht neu erstellt werden muss.
+    return result, add_and_update_query, params
 
 def build_query_to_add_column(table_meta_data:TableMetaData, attribute_name:str, target_column_data_type_info:dict[str:str]):
     """Aufbau der Abfrage, mit der das neue Attribut in die Zieltabelle eingefügt wird.
@@ -930,9 +947,27 @@ def execute_merge_and_add_constraints(target_table_meta_data:TableMetaData, sour
     Datenbankoperationen auftreten."""
 
     target_engine = target_table_meta_data.engine
-    # Ausführung der zuvor bei der Simulation erstellten Anweisung für das Einfügen und Füllen des zu übertragenden Attributes
+    ### Ausführung der zuvor bei der Simulation erstellten Anweisung für das Einfügen und Füllen des zu übertragenden Attributes ###
+    ## In MariaDB muss die Anweisung zum Einfügen des neuen Attributs separat ausgeführt werden. ##
+    if target_engine.dialect.name == 'mariadb':
+        # Wenn die übergebene Anweisung also zwei durch Semikolon getrennte Anweisungen enthält, ...
+        if ';' in query:
+            # .. werden diese voneinander getrennt ...
+            separate_queries = query.split(';')
+            # ... und die erste (d. h. das Einfügen des neuen Attributes) wird ausgeführt.
+            try:
+                execute_sql_query(target_engine, text(separate_queries[0]), raise_exceptions = True, commit = True)
+            # Hierbei werden auftretende Fehler ausgegeben.
+            except Exception as error:
+                raise error
+            # Bei Erfolg wird hingegen die Anweisung zum Einfügen der neuen Werte in die Variable query geschrieben, damit sie nachfolgend
+            # wie in PostgreSQL ausgeführt werden kann.
+            else:
+                query = separate_queries[1]
+    # Ausführung der (ggf. zuvor abgetrennten) UPDATE-Anweisung
     try:
         execute_sql_query(target_engine, text(query), params = params, raise_exceptions = True, commit = True)
+    # Weitergabe auftretender Fehler
     except Exception as error:
         raise error
     else:
@@ -940,6 +975,7 @@ def execute_merge_and_add_constraints(target_table_meta_data:TableMetaData, sour
             # Übertragen von UNIQUE- und CHECK-Constraints aus der Quelltabelle, falls vorhanden und möglich
             # Ausgabe der entsprechenden Meldung zur Anzeige in der App
             return add_constraints_to_new_attribute(target_table_meta_data, source_table_meta_data, target_attribute_name, source_attribute_name)
+        # Weitergabe auftretender Fehler
         except Exception as error:
             raise error
 

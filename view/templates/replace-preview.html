@@ -1,6 +1,7 @@
-<!-- Beruht auf der Vorlage für die Vorschau für Operationen auf einer Tabelle -->
+<!-- Nutzen der Vorlage für die Vorschau für Operationen auf einer Tabelle -->
 {% extends "one-table-preview-template.html" %}
 
+<!-- Ergänzung des Titels -->
 {% block title %}
 : Ersetzungsvorschau
 {% endblock title %}
@@ -80,10 +81,13 @@ class="active"
     <!-- Statistik für die tatsächlich veränderten Vorkommen des gesuchten Wertes -->
     <span class="counter">{{ occurrence_count | length }} </span> von {{ occurrence_count | length }}
     betroffenen Einträgen werden verändert.
+
+    <!-- Buttons für den Abbruch bzw. das Ausführen der Operation -->
     <div class="groups">
         <button id="backButton">Abbrechen</button>
         <input type="submit" value="Änderungen durchführen">
     </div>
+
     <!-- Daten, die für den Nutzer irrelevant sind, aber für die Ausführung der Ersetzung auf Basis dieser Vorschau benötigt werden -->
     <input type="hidden" name="string-to-replace" value="{{ string_to_replace }}">
     <input type="hidden" name="replacement-string" value="{{ replacement_string }}">
@@ -91,6 +95,7 @@ class="active"
 </form>
 {% endblock preview_content %}
 
+<!-- Erweiterung des JavaScript-Blocks der Vorlage -->
 {% block more_js %}
 <script>
     // Funktion für die Umstellung zwischen neuem und altem Wert bei Änderung des Checkboxzustands

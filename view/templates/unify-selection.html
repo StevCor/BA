@@ -1,26 +1,36 @@
+<!-- Nutzen der Vorlage für die Vorschau für Operationen auf einer Tabelle -->
 {% extends "one-table-preview-template.html"%}
 
+<!-- Ergänzung des Titels -->
 {% block title %}
 : Auswahl für Vereinheitlichen
 {% endblock title %}
 
+<!-- Hervorhebung des Links für die Vereinheitlichungsfunktion -->
 {% block unify_active %} class="active" {% endblock unify_active %}
 
+<!-- Darstellung der Vorschau der im ausgewählten Attribut vorkommenden einzigartigen Werte -->
 {% block preview_content %}
 <h4>Alle Werte des Attributs {{ column_to_unify }}</h4>
 Bitte wählen Sie die Werte aus, die ersetzt werden sollen.
 <form action="{{ '/unify-preview' }}" method="POST">
+    <!-- Gruppierung der Input-Elemente -->
     <div class="groups">
+        <!-- Bündelung der Input-Elemente und ihrer Label -->
         <div class="item">
-            <label for="replacement">Ausgewählte Werte ersetzen durch:</label>
+            <!-- Bei der Vereinheitlichung neu einzusetzender Wert -->
+            <label class="colored" for="replacement">Ausgewählte Werte ersetzen durch: </label>
             <input type="text" id="replacement" name="replacement">
         </div>
         <div class="item">
+            <!-- Absende-Button, der zur Vorschau für die Auswahl der zu bearbeitenden Vorkommen führt -->
             <input type="submit" id="preview" value="Vorschau">
         </div>
     </div>
     <div id="table">
+        <!-- Tabelle, die die Vorschau enthält -->
         <table id="selection">
+            <!-- Spaltenüberschriften -->
             <thead>
                 <tr>
                     <th></th>
@@ -28,18 +38,23 @@ Bitte wählen Sie die Werte aus, die ersetzt werden sollen.
                     <th>Anzahl Einträge</th>
                 </tr>
             </thead>
+            <!-- Tabellenkörper mit den Daten -->
             <tbody>
-                {# Zähler stammt von
+                {# Zähler für die Anzahl der Vorkommen zur eindeutigen Identifizerung, stammt von
                 https://stackoverflow.com/questions/7537439/how-to-increment-a-variable-on-a-for-loop-in-jinja-template
                 #}
                 {% set count = [] %}
                 {% for row in data %}
                 {% set __ = count.append(1) %}
+                <!-- Tabellenzeile -->
                 <tr>
                     {% for item in row %}
+                    <!-- Im ersten Wert des übergebenen Datenbankabfrageergebnisses stehen die einzigartigen Werte -->
                     {% if item == row[0] %}
+                    <!-- Sie werden mit einer Checkbox versehen, damit sie für die Bearbeitung ausgewählt werden können --->
                     <td><input type="checkbox" name="{{ count|length }}" value="{{ item }}"></td>
                     <td>{{ item }}</td>
+                    <!-- Die verbleibenden Werte werden in eine eigene Tabellenzellee eingetragen -->
                     {% else %}
                     <td>{{ item }}</td>
                     {% endif %}
@@ -49,15 +64,16 @@ Bitte wählen Sie die Werte aus, die ersetzt werden sollen.
             </tbody>
         </table>
     </div>
-
+    <!-- Übermittlung des betroffenen Attributs und des Tabellennamens, damit die in der Vorschau dargestellte Änderung korrekt durchgeführt werden kann -->
     <input type="hidden" id="column-to-unify" name="column-to-unify" value="{{ column_to_unify }}">
     <input type="hidden" id="table-name" name="table-name" value="{{ table_name }}">
 
 </form>
 {% endblock preview_content %}
 
+<!-- Erweiterung des JavaScript-Blocks der Vorlage -->
 {% block more_js %}
-
+<!-- Einfügen der Funktion für die Behandlung eingegebener leerer bzw. NULL-Werte -->
 <script src="{{url_for('static', filename='isEmpty.js')}}"></script>
 <script>
     // Button zur Anzeige der Vorschau
@@ -69,5 +85,4 @@ Bitte wählen Sie die Werte aus, die ersetzt werden sollen.
         return isEmpty(replacementString);
     })
 </script>
-
 {% endblock more_js %}

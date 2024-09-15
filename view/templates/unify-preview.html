@@ -1,22 +1,33 @@
+<!-- Nutzen der Vorlage für die Vorschau für Operationen auf einer Tabelle -->
 {% extends "one-table-preview-template.html" %}
+
+<!-- Ergänzung des Titels -->
 {% block title %}
 : Vorschau für Vereinheitlichen
 {% endblock title %}
+
+<!-- Hervorhebung des Links für die Vereinheitlichungsfunktion -->
 {% block unify_active %} _class="active" {% endblock unify_active %}
+
+<!-- Darstellung der Vorschau für die Auswahl der zu ersetzenden Vorkommen -->
 {% block preview_content %}
 <h4>Vorschau der Änderungen des Attributs {{ column_to_unify }}</h4>
 <form action="{{ '/unify' }}" method="POST">
     Bitte überprüfen Sie die aktualisierten Werte.
     <div class="groups">
+        <!-- Button für den Abbruch der Operation -->
         <div class="item">
             <a href="{{ url_for('unify_db_entries') }}"><button>Abbrechen</button></a>
         </div>
+        <!-- Button für die Durchführung der Operation -->
         <div class="item">
             <input type="submit" value="Änderungen durchführen">
         </div>
     </div>
     <div id="table">
+        <!-- Tabelle, die die Vorschau enthält -->
         <table id="preview">
+            <!-- Spaltenüberschriften -->
             <thead>
                 <tr>
                     {% for column in table_columns %}
@@ -25,20 +36,26 @@
                 </tr>
             </thead>
             <tbody>
-                {# Zähler stammt von
+                {# Zähler für die Anzahl der Vorkommen zur eindeutigen Identifizerung, stammt von
                 https://stackoverflow.com/questions/7537439/how-to-increment-a-variable-on-a-for-loop-in-jinja-template
                 #}
                 {% set row_count = [] %}
                 {% for row in data %}
                 {% set __ = row_count.append(1) %}
+                {# Zähler für die Attribute je Zeile, zur Identifizierung des betroffenen und daher mit Checkboxen zu
+                versehenden Attributs #}
                 {% set attribute_count = [] %}
+                {# Es werden nur die Tabellenzeilen dargestellt, die den gesuchten Wert enthalten #}
                 {% if row_count | length in affected_rows %}
                 <tr>
                     {% for item in row %}
                     {% set __ = attribute_count.append(1) %}
+                    {# Darstellung für die ausgewählten Vorkommen: neuer Wert in Grün, alter Wert in schwarzer Schrift
+                    in Klammern dahinter #}
                     {% if attribute_count | length == index_of_affected_attribute %}
-                    <td><span style="color: green;">{{ new_value }} </span>(alt: {{item}})</td>
+                    <td><span class="highlight">{{ new_value }} </span>(alt: {{item}})</td>
                     {% else %}
+                    {# Nicht ausgewählte Werte werden in Schwarz dargestellt #}
                     <td>{{ item }}</td>
                     {% endif %}
                     {% endfor %}
@@ -48,7 +65,10 @@
             </tbody>
         </table>
     </div>
+    <!-- Statistik für die Anzahl der zur Veränderung ausgewählten Vorkommen des gesuchten Wertes -->
     {{ affected_rows | length }} von {{ row_total }} Einträgen werden verändert.
+
+    <!-- Daten, die für den Nutzer irrelevant sind, aber für die Ausführung der Ersetzung auf Basis dieser Vorschau benötigt werden -->
     <input type="hidden" id="column-to-unify" name="column-to-unify" value="{{ column_to_unify }}">
     <input type="hidden" id="old-values" name="old-values" value="{{ old_values }}">
     <input type="hidden" id="new-value" name="new-value" value="{{ new_value }}">

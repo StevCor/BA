@@ -1,16 +1,21 @@
+<!-- Vorlage für die Startseiten der Operationen auf zwei Tabellen (keine Vorschau) -->
 <!DOCTYPE html>
 <html lang="de">
 
 <head>
-    <title>SQL-Datenbanken{% block title %}{% endblock title %}</title>
+    <title>SQL-Datenbanken{% block title %}{# Platzhalter für eventuelle Zusätze für den Seitentitel #}{% endblock title
+        %}</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- Link zur CSS-Datei für die Grid.js-Tabelle -->
+    <link rel="stylesheet" href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css">
+    <!-- Link zur CSS-Datei für die eigenen Elemente -->
     <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
-    <link href="https://unpkg.com/gridjs/dist/theme/mermaid.min.css" rel="stylesheet" />
 </head>
 
 <body>
     <div class="two-tables">
+        <!-- Header mit den Informationen über die aktuelle(n) Datenbankverbindung(en) und Logout-Buttons -->
         <nav class="navtop">
             <div>
                 <h1>Willkommen, {{user_name}}!</h1>
@@ -26,8 +31,12 @@
                 <a href="{{ url_for('logout') }}"><button>Logout</button></a>
             </div>
         </nav>
+
+        <!-- Navigationsleiste mit den Links zu den Seiten für die Operationen auf zwei Tabellen -->
         <div class="links">
+            <!-- Button für die Rückkehr zur vorigen Seite -->
             <button id="back">Zurück</button>
+            <!-- In die Jinja-Blöcke hinter den Links kann class="active" eingetragen werden, um den jeweiligen Link optisch als aktiv hervorzuheben -->
             <div class="tab">
                 <a href="{{ url_for('compare_two_tables') }}" {% block compare_active %}{% endblock compare_active
                     %}>Tabellen
@@ -36,86 +45,126 @@
                     verbinden</a>
             </div>
         </div>
+
+        <!-- Darstellung der Nachrichten, die mittels flash() übergeben wurden -->
         {% include 'message.html' %}
+
+        <!-- Für die Durchführung aller Operationen auf zwei Tabellen benötigte Input-Elemente -->
         <div class="selection">
+            <!-- Formular mit Platzhalter für den operationsspezifischen Endpunkt der App -->
             <form {% block form_action %}{% endblock form_action %} method="POST">
-                <label for="target-table">Zieltabelle des Joins:</label>
-                <select id="target-table" name="target-table" required>
-                    <option value="table_1" name="target-table" selected>{{ db_name_1 + '.' + table_name_1 }}
-                    </option>
-                    <option value="table_2" name="target-table">{{ db_name_2 + '.' + table_name_2 }}</option>
-                </select>
-                <label for="attribute-selection">Verbinden über:</label>
-                <select name="attribute-selection" id="attribute-selection" required>
-                    {% for key, val in comp_by_code|dictsort %}
-                    {% if key == 1 %}
-                    <optgroup label="vollständig kompatibel">
-                        {% elif key == 2 %}
-                    <optgroup label="ggf. uneindeutige Werte">
-                        {% elif key == 3 %}
-                    <optgroup label="ggf. Typkonversion nötig">
-                        {% elif key == 4 %}
-                    <optgroup label="Typkonversion nötig">
-                        {% elif key == 5 %}
-                    <optgroup label="ggf. Typkonversion nötig und ggf. uneindeutige Werte">
-                        {% elif key == 6 %}
-                    <optgroup label="Typkonversion nötig und ggf. uneindeutige Werte">
-                        {% endif %}
-                        {% for value in comp_by_code[key] %}
-                        <option value="{{ value[0] }}, {{ value[1] }}" name="{{ value[0] }}, {{ value[1] }}">{{
-                            db_name_1 + '.' + value[0]
-                            }}, {{ db_name_2 +
-                            '.' + value[1] }}
-                        </option>
-                        {% endfor %}
-                    </optgroup>
-                    {% endfor %}
-                </select>
+                <div class="groups">
+                    <!-- Gruppierung des Dropdown-Menüs mit seinem Label -->
+                    <div class="item">
+                        <!-- Dropdown-Menü zur Festlegung der Zieltabelle des Joins; wird beim Vergleich lediglich als Erstes dargestellt, bei der Attribut-
+                        übertragung werden in dieser die neuen Werte gespeichert -->
+                        <label class="colored" for="target-table">Zieltabelle des Joins:</label>
+                        <select id="target-table" name="target-table" required>
+                            <option value="table_1" name="target-table" selected>{{ db_name_1 + '.' + table_name_1 }}
+                            </option>
+                            <option value="table_2" name="target-table">{{ db_name_2 + '.' + table_name_2 }}</option>
+                        </select>
+                    </div>
+                    <!-- Gruppierung des Dropdown-Menüs mit seinem Label -->
+                    <div class="item">
+                        <!-- Dropdown-Menü für die Auswahl der Join-Attribute, nach Kompatibilität geordnet -->
+                        <label class="colored" for="attribute-selection">Verbinden über:</label>
+                        <select name="attribute-selection" id="attribute-selection" required>
+                            {% for key, val in comp_by_code|dictsort %}
+                            {% if key == 1 %}
+                            <optgroup label="vollständig kompatibel">
+                                {% elif key == 2 %}
+                            <optgroup label="ggf. uneindeutige Werte">
+                                {% elif key == 3 %}
+                            <optgroup label="ggf. Typkonversion nötig">
+                                {% elif key == 4 %}
+                            <optgroup label="Typkonversion nötig">
+                                {% elif key == 5 %}
+                            <optgroup label="ggf. Typkonversion nötig und ggf. uneindeutige Werte">
+                                {% elif key == 6 %}
+                            <optgroup label="Typkonversion nötig und ggf. uneindeutige Werte">
+                                {% endif %}
+                                {% for value in comp_by_code[key] %}
+                                <!-- Die Attribute der beiden Tabellen werden paarweise angezeigt und das ausgewählte Paar wird als Tupel an den Server
+                        übermittelt. Zur besseren Identifizerung wird den Attribut- und Tabellennamen der Datenbankname vorangestellt. -->
+                                <option value="{{ value[0] }}, {{ value[1] }}" name="{{ value[0] }}, {{ value[1] }}">{{
+                                    db_name_1 + '.' + value[0]
+                                    }}, {{ db_name_2 +
+                                    '.' + value[1] }}
+                                </option>
+                                {% endfor %}
+                            </optgroup>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <!-- Auswahl der Richtung der Typkonversion -->
                 <div class="cast-selection">
                     Typkonversion erzwingen:
+                    <!-- Standardwert, durch den implizit sinnvoll erscheinende Konversionen vorgenommen werden -->
                     <input type="radio" id="none" name="cast" value=0 checked required>
                     <label for="none">Keine</label>
+                    <!-- Auswahl der Typkonversion für das Join-Attribut der auf dieser Seite als Erstes dargestellten Tabelle -->
                     <input type="radio" id="attribute1" name="cast" value=1 required>
                     <label for="attribute1">Für {{ db_name_1 }}.{{ table_name_1 }}</label>
+                    <!-- Auswahl der Typkonversion für das Join-Attribut der auf dieser Seite als Zweites dargestellten Tabelle -->
                     <input type="radio" id="attribute2" name="cast" value=2 required>
                     <label for="attribute2">Für {{ db_name_2 }}.{{ table_name_2 }}</label>
+
+                    <!-- Platzhalter für ggf. nötige Checkbox für die Auswahl eines Full Outer Join -->
+                    {% block full_outer_join %}{% endblock full_outer_join %}
                 </div>
 
+                <!-- Platzhalter für operationsspezifische Input-Elemente des Formulars -->
                 {% block additional_params %}{% endblock additional_params %}
-
             </form>
         </div>
+
+        <!-- Darstellung der beiden aktiven Tabellen -->
         <div id="tables">
             <div id="table1"></div>
             <div id="table2"></div>
         </div>
     </div>
+
+    <!-- JavaScript für die allgemeine Darstellung der Grid.js-Tabelle -->
     <script src="https://unpkg.com/gridjs/dist/gridjs.umd.js"></script>
+
+    <!-- JavaScript mit der Funktion für die app-spezifische Anzeige der Grid.js-Tabelle (z. B. Beschriftungen der Tabellenelemente) -->
     <script src="{{url_for('static', filename='showTable.js')}}"></script>
+
+    <!-- JavaScript für die Funktion zur Abfrage einer Bestätigung bei Klick auf einen Zurück-Button -->
     <script src="{{url_for('static', filename='confirmBack.js')}}"></script>
+
     <script>
+        // Umwandlung der mit Python übergebenen darzustellenden Attributnamen und Daten für die erste Tabelle in JavaScript-Arrays
         var columns1 = {{ table_columns_1 | tojson | safe }};
         var data1 = {{ data_1 | tojson | safe }};
+        // Darstellung der ersten Tabelle
         showTable(columns1, data1, 'table1');
 
+        // Umwandlung der mit Python übergebenen darzustellenden Attributnamen und Daten für die zweite Tabelle in JavaScript-Arrays
         var columns2 = {{ table_columns_2 | tojson | safe }};
         var data2 = {{ data_2 | tojson | safe }};
+        // Darstellung der zweiten Tabelle
         showTable(columns2, data2, 'table2');
 
+        // EventListener zur Abfrage einer Bestätigung bei Klick auf den Zurück-Button
         const backButton = document.getElementById('back')
         backButton.addEventListener('click', function () {
             confirmBack();
         });
 
+        // EventListener für die Trennung der Datenbankverbindung bei Klick auf den entsprechenden Button 
         const disconnectButton = document.getElementById('disconnect');
         disconnectButton.addEventListener('click', function () {
             return confirm('Sind Sie sicher, dass Sie die Datenbankverbindungen trennen wollen? Sie kehren dann zur Anmeldeseite zurück.');
         });
     </script>
 
+    <!-- Platzhalter für ggf. benötigte weitere JavaScript-Blöcke -->
     {% block more_js %}
     {% endblock more_js %}
-
 </body>
 
 </html>

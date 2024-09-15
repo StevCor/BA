@@ -46,18 +46,21 @@ form {
 
 /**** Darstellung der Formularelemente ****/
 
-
+/* Klasse zur Darstellung der Labels von Input-Elementen in Blau mit weißer Schrift 
+nötig, da die Beschriftungen der Checkboxen in der Vorschau Labels sind, die in einfacher schwarzer Schrift dargestellt werden sollen */
 .colored {
     display: flex;
     justify-content: center;
-    align-items: center;
+    /*align-items: center;*/
     width: auto;
     height: 50px;
     background-color: #3d84b4;
     color: #ffffff;
+    margin-bottom: 20px;
     padding: 12px;
 }
 
+/* Darstellung der Texteingabefelder im Formular */
 form input[type="text"] {
     width: 310px;
     height: 50px;
@@ -66,15 +69,7 @@ form input[type="text"] {
     padding: 0 15px;
 }
 
-input[type=text],
-textarea {
-    width: 100%;
-    padding: 12px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    resize: vertical;
-}
-
+/* Darstellung der Absende-Buttons der Formulare in Blau mit weißer Schrift */
 form input[type="submit"] {
     width: auto;
     float: right;
@@ -88,11 +83,13 @@ form input[type="submit"] {
     transition: background-color 0.2s;
 }
 
+/* Farbanpassung des Absende-Buttons bei Mouse-over */
 form input[type="submit"]:hover {
-    background-color: #006ab3;
+    background-color: #045c97;
     transition: background-color 0.2s;
 }
 
+/* Anpassung der Darstellung von Dropdown-Menüs an jene der Textfelder */
 form select {
     width: auto;
     height: 50px;
@@ -114,6 +111,7 @@ form select {
     display: inline-flex;
     float: left;
     padding: 12px;
+    align-items: baseline;
 }
 
 /* Darstellung der einfachen HTML-Tabellen für die Vorschau (Vereinheitlichen, Suchen und Ersetzen */
